@@ -8,12 +8,17 @@ import {
   TouchableOpacity,
   Alert,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import ScreenWrapper from "../components/ScreenWrapper";
 import { authColors } from "../colors/colors";
+import useAuthStore from "../store/AuthStore";
 
 const ROLES = ["Fleet Manager", "Dispatcher", "Safety Officer", "Financial Analyst"];
 
 export default function SettingsScreen() {
+  const navigation = useNavigation<any>();
+  const { user, logout } = useAuthStore();
+
   const [depot, setDepot] = useState("Gandhinagar Depot GJ-4");
   const [currency, setCurrency] = useState("INR (Rs)");
   const [distanceUnit, setDistanceUnit] = useState("Kilometers");
@@ -22,9 +27,58 @@ export default function SettingsScreen() {
     Alert.alert("Settings Updated", "Configuration changes have been saved to local memory.");
   };
 
+  const handleLogout = async () => {
+    Alert.alert(
+      "Confirm Logout",
+      "Are you sure you want to log out of TransitSync?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Logout",
+          style: "destructive",
+          onPress: async () => {
+            await logout();
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <ScreenWrapper title="Settings">
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+        {/* User Profile & Account Info */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Account & Session</Text>
+          <View style={styles.profileCard}>
+            <View style={styles.profileRow}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>
+                  {user?.name?.[0]?.toUpperCase() || "U"}
+                </Text>
+              </View>
+              <View style={styles.profileInfo}>
+                <Text style={styles.userName}>{user?.name || "Demo User"}</Text>
+                <Text style={styles.userEmail}>{user?.email || "user@transitsync.com"}</Text>
+                <View style={styles.roleBadge}>
+                  <Text style={styles.roleBadgeText}>
+                    {user?.role === "ROLE_DISPATCHER"
+                      ? "Dispatcher"
+                      : user?.role === "ROLE_ADMIN"
+                      ? "Administrator"
+                      : "Driver / Team Member"}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+              <Text style={styles.logoutBtnIcon}>🚪</Text>
+              <Text style={styles.logoutBtnText}>Logout from Account</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* General Settings */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>General Configuration</Text>
@@ -99,7 +153,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   scrollContent: {
-    paddingBottom: 32,
+    paddingBottom: 40,
     gap: 20,
   },
   section: {
@@ -111,6 +165,81 @@ const styles = StyleSheet.create({
     color: authColors.textMuted,
     textTransform: "uppercase",
     letterSpacing: 1.5,
+  },
+  profileCard: {
+    backgroundColor: authColors.cardBg,
+    borderWidth: 1,
+    borderColor: authColors.cardBorder,
+    borderRadius: 16,
+    padding: 18,
+    gap: 16,
+  },
+  profileRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: authColors.roleActiveBg,
+    borderWidth: 1,
+    borderColor: authColors.roleActiveBorder,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: authColors.roleAccent,
+  },
+  profileInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  userName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: authColors.textPrimary,
+  },
+  userEmail: {
+    fontSize: 12,
+    color: authColors.textMuted,
+  },
+  roleBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(37, 99, 235, 0.12)",
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: "rgba(37, 99, 235, 0.3)",
+  },
+  roleBadgeText: {
+    color: authColors.roleAccent,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  logoutBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(239, 68, 68, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.4)",
+    borderRadius: 12,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  logoutBtnIcon: {
+    fontSize: 16,
+  },
+  logoutBtnText: {
+    color: "#EF4444",
+    fontSize: 14,
+    fontWeight: "700",
   },
   card: {
     backgroundColor: authColors.cardBg,

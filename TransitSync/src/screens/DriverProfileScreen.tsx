@@ -17,8 +17,8 @@ import useAuthStore from "../store/AuthStore";
 import Loader from "../components/Loader";
 
 export default function DriverProfileScreen() {
-  const { drivers, getDrivers, loading: driversLoading } = useDriverStore();
-  const { signup, loading: signupLoading } = useAuthStore();
+  const { drivers, getDrivers, createDriver, loading: driversLoading } = useDriverStore();
+  const { loading: signupLoading } = useAuthStore();
   const [searchQuery, setSearchQuery] = useState("");
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedId, setSelectedId] = useState<string | number | null>(null);
@@ -73,11 +73,11 @@ export default function DriverProfileScreen() {
       safetyScore: 100,
     };
 
-    const res = await signup(payload);
+    const res = await createDriver(payload);
     if (res.success) {
       setModalVisible(false);
       clearForm();
-      getDrivers();
+      // No need to call getDrivers() here if createDriver already does it internally
       Alert.alert("Success", "Driver profile created and added to registry!");
     } else {
       Alert.alert("Failed", res.message || "Could not register driver");

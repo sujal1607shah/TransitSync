@@ -1,7 +1,8 @@
 import { create } from "zustand";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "../api/axiosClient";
-import { GetDrivers } from "../api/apiPath";
+import { GetDrivers, ChatConversationsUrl, ChatDirectConversationUrl, ChatMessagesUrl, BASE_URL } from "../api/apiPath";
+import { socketService } from "../services/socketService";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type UserRole = "ROLE_ADMIN" | "ROLE_DISPATCHER" | "ROLE_DRIVER" | string;
@@ -11,259 +12,302 @@ export interface Contact {
   name: string;
   role: UserRole;
   isOnline: boolean;
+  avatar?: string;
+  conversationId?: string;
 }
 
 export interface ChatMessage {
   id: string;
   text: string;
-  senderId: string; // "me" or contact id
-  timestamp: number; // unix ms
+  senderId: string;
+  timestamp: number;
   read: boolean;
-  // Optional media attachment
   mediaUri?: string;
   mediaType?: "image" | "video" | "file";
-  mediaName?: string; // for files
+  mediaName?: string;
 }
 
 export interface Conversation {
   contactId: string;
+  conversationId: string;
   messages: ChatMessage[];
   unreadCount: number;
+  lastMessage?: string;
+  lastMessageAt?: number;
 }
 
 interface ChatState {
-  contacts: Contact[];
+  contacts: Contact[]; // Derived from conversations
   conversations: Record<string, Conversation>;
   loadingContacts: boolean;
 
   // Actions
-  loadContacts: (currentUserId: string | number) => Promise<void>;
+  initSocket: (token: string, userId: string) => void;
+  disconnectSocket: () => void;
+  loadConversations: (currentUserId: string) => Promise<void>;
+  getOrCreateConversation: (userId: string) => Promise<string | null>;
+  fetchMessages: (conversationId: string, contactId: string) => Promise<void>;
   getMessages: (contactId: string) => ChatMessage[];
   sendMessage: (contactId: string, text: string, senderName: string, mediaUri?: string, mediaType?: "image" | "video" | "file", mediaName?: string) => void;
   markRead: (contactId: string) => void;
   getLastMessage: (contactId: string) => ChatMessage | null;
   getUnread: (contactId: string) => number;
+  
+  // Real-time handlers exposed to the component
+  handleNewMessage: (msg: any, currentUserId: string) => void;
 }
 
-// ─── Bot reply pool per role ──────────────────────────────────────────────────
-const DRIVER_REPLIES = [
-  "Roger that, heading to the pickup point now. 🚚",
-  "On my way, ETA about 15 minutes.",
-  "Traffic is a bit heavy on Route 7, taking the bypass.",
-  "Cargo loaded and secured. Ready to depart.",
-  "Arrived at the destination. Unloading in progress.",
-  "Vehicle check done — all good. Ready for next trip.",
-  "Can you confirm the delivery address again?",
-  "I'll need a break soon, been on the road for 4 hours.",
-];
-
-const ADMIN_REPLIES = [
-  "Acknowledged. I'll review the report shortly.",
-  "Good work, team. Keep up the efficiency!",
-  "Route change approved. Proceed as planned.",
-  "Please submit the expense receipt by end of day.",
-  "Fleet audit is scheduled for Friday. Be prepared.",
-  "Trip log has been updated in the system.",
-  "All drivers, stand by for the morning briefing at 08:00.",
-];
-
-const DISPATCHER_REPLIES = [
-  "Dispatch confirmed. Trip ID #4831 assigned.",
-  "Vehicle TRK-04 is now available for your route.",
-  "Route optimization done — saves 12 km on today's trips.",
-  "New trip request received from depot. Assigning now.",
-  "Fuel card approved for your next trip.",
-  "Can you give me an update on the cargo status?",
-  "Standby, I'm coordinating with the warehouse team.",
-];
-
-const MEDIA_REPLIES = [
-  "Got it, photo received! 📸 I can see it clearly.",
-  "Thanks for sharing the image. I'll review it.",
-  "Photo noted. I'll look into this situation.",
-  "Received the media. Will forward to the team.",
-  "Image saved. We'll handle it ASAP. ✅",
-];
-
-function getReplyForRole(role: UserRole, hasMedia: boolean): string {
-  if (hasMedia && Math.random() > 0.5) {
-    return MEDIA_REPLIES[Math.floor(Math.random() * MEDIA_REPLIES.length)];
-  }
-  const pool =
-    role === "ROLE_DRIVER"
-      ? DRIVER_REPLIES
-      : role === "ROLE_ADMIN"
-      ? ADMIN_REPLIES
-      : DISPATCHER_REPLIES;
-  return pool[Math.floor(Math.random() * pool.length)];
-}
-
-// ─── Persistence helpers ──────────────────────────────────────────────────────
-const STORAGE_KEY = "transitSync_conversations";
-
-async function saveConversations(convs: Record<string, Conversation>) {
-  try {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(convs));
-  } catch {}
-}
-
-async function loadConversations(): Promise<Record<string, Conversation>> {
-  try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-// ─── Mock team members (always present regardless of backend) ────────────────
-const MOCK_CONTACTS: Contact[] = [
-  { id: "admin-1", name: "Aisha Khan", role: "ROLE_ADMIN", isOnline: true },
-  { id: "admin-2", name: "Rahul Mehta", role: "ROLE_ADMIN", isOnline: false },
-  { id: "disp-1", name: "Sara Torres", role: "ROLE_DISPATCHER", isOnline: true },
-  { id: "disp-2", name: "Omar Farooq", role: "ROLE_DISPATCHER", isOnline: true },
-  { id: "driver-mock-1", name: "David Patel", role: "ROLE_DRIVER", isOnline: false },
-  { id: "driver-mock-2", name: "Lena Raza", role: "ROLE_DRIVER", isOnline: true },
-];
-
-// ─── Store ────────────────────────────────────────────────────────────────────
 const useChatStore = create<ChatState>((set, get) => ({
   contacts: [],
   conversations: {},
   loadingContacts: false,
 
-  loadContacts: async (currentUserId) => {
+  initSocket: (token: string, userId: string) => {
+    socketService.connect(token);
+    socketService.on('message:new', (msg) => {
+      get().handleNewMessage(msg, userId);
+    });
+  },
+
+  disconnectSocket: () => {
+    socketService.disconnect();
+    set({ contacts: [], conversations: {} });
+  },
+
+  loadConversations: async (currentUserId) => {
     set({ loadingContacts: true });
 
-    // Load persisted conversations first
-    const savedConvs = await loadConversations();
+    try {      const res = await axios.get(ChatConversationsUrl);
+      const data = res.data?.data || res.data?.serviceResult || [];
+      
+      const newConversations: Record<string, Conversation> = {};
+      const newContacts: Contact[] = [];
 
-    // Merge mock contacts
-    let contacts: Contact[] = [...MOCK_CONTACTS];
+      data.forEach((conv: any) => {
+        // Find the other participant
+        const otherParticipant = conv.participants.find((p: any) => String(p._id) !== currentUserId);
+        if (!otherParticipant) return; // Skip if no other participant found (shouldn't happen for direct)
 
-    // Try fetching real drivers from the backend
+        const contactId = String(otherParticipant._id);
+        
+        newContacts.push({
+          id: contactId,
+          name: otherParticipant.name,
+          role: otherParticipant.role,
+          isOnline: otherParticipant.isOnline,
+          avatar: otherParticipant.avatar,
+          conversationId: conv.conversationId
+        });
+
+        const unread = conv.unreadCount ? (conv.unreadCount[currentUserId] || 0) : 0;
+
+        newConversations[contactId] = {
+          contactId,
+          conversationId: conv.conversationId,
+          messages: [],
+          unreadCount: unread,
+          lastMessage: conv.lastMessage,
+          lastMessageAt: conv.lastMessageAt ? new Date(conv.lastMessageAt).getTime() : Date.now()
+        };
+      });
+
+      set({ contacts: newContacts, conversations: newConversations, loadingContacts: false });
+    } catch (error) {
+      console.error("Failed to load conversations", error);
+      set({ loadingContacts: false });
+    }
+  },
+
+  getOrCreateConversation: async (userId: string) => {
     try {
-      const res = await axios.get(GetDrivers, { params: { role: "ROLE_DRIVER" } });
-      const data = res.data;
-      let list: any[] = [];
-      if (Array.isArray(data)) list = data;
-      else if (Array.isArray(data?.serviceResult)) list = data.serviceResult;
-      else if (Array.isArray(data?.data)) list = data.data;
-
-      const liveDrivers: Contact[] = list
-        .filter((d: any) => String(d.id) !== String(currentUserId))
-        .map((d: any) => ({
-          id: String(d.id),
-          name: d.name ?? "Driver",
-          role: d.role ?? "ROLE_DRIVER",
-          isOnline: Math.random() > 0.4,
-        }));
-
-      // Deduplicate with mock
-      const liveIds = new Set(liveDrivers.map((d) => d.id));
-      const dedupedMock = MOCK_CONTACTS.filter((m) => !liveIds.has(m.id));
-      contacts = [...liveDrivers, ...dedupedMock];
-    } catch {
-      // Fall back to mock contacts silently
+      const res = await axios.post(ChatDirectConversationUrl, { userId });
+      const conv = res.data?.data;
+      if (!conv) return null;
+      
+      return conv.conversationId;
+    } catch (error) {
+      console.error("Failed to get/create conversation", error);
+      return null;
     }
+  },
 
-    // Ensure conversation entry for every contact
-    const conversations = { ...savedConvs };
-    for (const c of contacts) {
-      if (!conversations[c.id]) {
-        conversations[c.id] = { contactId: c.id, messages: [], unreadCount: 0 };
-      }
+  fetchMessages: async (conversationId: string, contactId: string) => {
+    try {
+      const res = await axios.get(`${ChatConversationsUrl}/${conversationId}/messages`);
+      const msgs = res.data?.data || res.data?.serviceResult || [];
+      
+      const parsedMsgs: ChatMessage[] = msgs.map((m: any) => ({
+        id: m.messageId,
+        text: m.content,
+        senderId: String(m.senderId),
+        timestamp: new Date(m.createdAt || m.timestamp || Date.now()).getTime(),
+        read: m.read,
+        mediaUri: m.mediaUri,
+        mediaType: m.mediaType,
+      }));
+
+      set((state) => {
+        const prev = state.conversations[contactId];
+        if (!prev) return state;
+
+        return {
+          conversations: {
+            ...state.conversations,
+            [contactId]: {
+              ...prev,
+              messages: parsedMsgs
+            }
+          }
+        };
+      });
+
+    } catch (error) {
+      console.error("Failed to fetch messages", error);
     }
-
-    set({ contacts, conversations, loadingContacts: false });
   },
 
   getMessages: (contactId) => {
     return get().conversations[contactId]?.messages ?? [];
   },
 
-  sendMessage: (contactId, text, _senderName, mediaUri?, mediaType?, mediaName?) => {
-    const now = Date.now();
-    const userMsg: ChatMessage = {
-      id: `msg-${now}`,
-      text,
-      senderId: "me",
-      timestamp: now,
-      read: true,
-      ...(mediaUri ? { mediaUri, mediaType: mediaType ?? "image", mediaName } : {}),
+  sendMessage: async (contactId, text, senderName, mediaUri?, mediaType?, mediaName?) => {
+    const state = get();
+    let conversationId = state.conversations[contactId]?.conversationId;
+
+    if (!conversationId) {
+      conversationId = await state.getOrCreateConversation(contactId) || '';
+      if (!conversationId) return; // Error creating
+    }
+
+    try {
+      const res = await axios.post(ChatMessagesUrl, {
+        conversationId,
+        content: text,
+        mediaUri,
+        mediaType
+      });
+
+      // Optimistically we could add it, but since we have sockets, 
+      // the socket handleNewMessage will actually push it to the state cleanly 
+      // if we are the sender as well, or we can push optimistically.
+      // We will push optimistically for better UX.
+
+      const createdMsg = res.data?.data;
+      if (!createdMsg) return;
+
+      const userMsg: ChatMessage = {
+        id: createdMsg.messageId,
+        text: createdMsg.content,
+        senderId: createdMsg.senderId,
+        timestamp: new Date(createdMsg.createdAt || createdMsg.timestamp || Date.now()).getTime(),
+        read: true,
+        mediaUri: createdMsg.mediaUri,
+        mediaType: createdMsg.mediaType as any,
+      };
+
+      set((s) => {
+        const prev = s.conversations[contactId];
+        if (!prev) return s;
+        return {
+          conversations: {
+            ...s.conversations,
+            [contactId]: {
+              ...prev,
+              messages: [...prev.messages, userMsg],
+              lastMessage: text,
+              lastMessageAt: userMsg.timestamp
+            }
+          }
+        };
+      });
+    } catch (error) {
+      console.error("Failed to send message", error);
+    }
+  },
+
+  handleNewMessage: (msg: any, currentUserId: string) => {
+    const isMe = String(msg.senderId) === currentUserId;
+    if (isMe) return; // Handled optimistically in sendMessage
+
+    const contactId = String(msg.senderId);
+
+    const newMsg: ChatMessage = {
+      id: msg.messageId,
+      text: msg.content,
+      senderId: contactId,
+      timestamp: new Date(msg.createdAt || msg.timestamp || Date.now()).getTime(),
+      read: false,
+      mediaUri: msg.mediaUri,
+      mediaType: msg.mediaType,
     };
 
     set((state) => {
-      const prev = state.conversations[contactId] ?? {
-        contactId,
-        messages: [],
-        unreadCount: 0,
-      };
-      const updated = {
-        ...state.conversations,
-        [contactId]: {
-          ...prev,
-          messages: [...prev.messages, userMsg],
-          unreadCount: 0,
-        },
-      };
-      saveConversations(updated);
-      return { conversations: updated };
-    });
+      const prev = state.conversations[contactId];
+      if (!prev) {
+        // If we don't have the conversation loaded, we should ideally reload contacts
+        // For now, we can just trigger a load
+        setTimeout(() => get().loadConversations(currentUserId), 100);
+        return state;
+      }
 
-    // Simulate contact reply
-    const contact = get().contacts.find((c) => c.id === contactId);
-    const delay = 1000 + Math.random() * 1000;
-    setTimeout(() => {
-      const replyText = getReplyForRole(contact?.role ?? "ROLE_DRIVER", !!mediaUri);
-
-      const replyMsg: ChatMessage = {
-        id: `msg-${Date.now()}`,
-        text: replyText,
-        senderId: contactId,
-        timestamp: Date.now(),
-        read: false,
-      };
-      set((state) => {
-        const prev = state.conversations[contactId] ?? {
-          contactId,
-          messages: [],
-          unreadCount: 0,
-        };
-        const updated = {
+      return {
+        conversations: {
           ...state.conversations,
           [contactId]: {
             ...prev,
-            messages: [...prev.messages, replyMsg],
+            messages: [...prev.messages, newMsg],
             unreadCount: prev.unreadCount + 1,
-          },
-        };
-        saveConversations(updated);
-        return { conversations: updated };
-      });
-    }, delay);
+            lastMessage: newMsg.text,
+            lastMessageAt: newMsg.timestamp
+          }
+        }
+      };
+    });
   },
 
-  markRead: (contactId) => {
-    set((state) => {
-      const prev = state.conversations[contactId];
-      if (!prev) return {};
-      const updated = {
-        ...state.conversations,
-        [contactId]: {
-          ...prev,
-          messages: prev.messages.map((m) => ({ ...m, read: true })),
-          unreadCount: 0,
-        },
-      };
-      saveConversations(updated);
-      return { conversations: updated };
-    });
+  markRead: async (contactId) => {
+    const state = get();
+    const conv = state.conversations[contactId];
+    if (!conv || !conv.conversationId) return;
+
+    try {
+      await axios.patch(`${BASE_URL}/api/chat/conversations/${conv.conversationId}/read`);
+      
+      set((s) => {
+        const prev = s.conversations[contactId];
+        if (!prev) return s;
+        return {
+          conversations: {
+            ...s.conversations,
+            [contactId]: {
+              ...prev,
+              messages: prev.messages.map((m) => ({ ...m, read: true })),
+              unreadCount: 0,
+            },
+          },
+        };
+      });
+    } catch (error) {
+      console.error("Failed to mark read", error);
+    }
   },
 
   getLastMessage: (contactId) => {
     const msgs = get().conversations[contactId]?.messages ?? [];
-    return msgs.length > 0 ? msgs[msgs.length - 1] : null;
+    if (msgs.length > 0) return msgs[msgs.length - 1];
+    
+    // Fallback to conversation summary
+    const conv = get().conversations[contactId];
+    if (conv && conv.lastMessage) {
+      return {
+        id: 'mock',
+        text: conv.lastMessage,
+        senderId: contactId,
+        timestamp: conv.lastMessageAt || 0,
+        read: true
+      };
+    }
+    return null;
   },
 
   getUnread: (contactId) => {

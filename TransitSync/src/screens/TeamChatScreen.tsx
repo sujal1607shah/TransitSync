@@ -1,10 +1,11 @@
-import React, { useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   StyleSheet,
   View,
   Text,
   FlatList,
   TouchableOpacity,
+  TextInput,
   ActivityIndicator,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
@@ -12,374 +13,358 @@ import ScreenWrapper from "../components/ScreenWrapper";
 import { authColors } from "../colors/colors";
 import useAuthStore from "../store/AuthStore";
 import useChatStore, { Contact } from "../store/ChatStore";
+import axios from "../api/axiosClient";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { GetDrivers } from "../api/apiPath";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function roleLabel(role: string): string {
-  switch (role) {
-    case "ROLE_ADMIN":
-      return "Admin";
-    case "ROLE_DISPATCHER":
-      return "Dispatcher";
-    case "ROLE_DRIVER":
-      return "Driver";
-    default:
-      return role;
-  }
-}
-
-function roleColor(role: string): string {
-  switch (role) {
-    case "ROLE_ADMIN":
-      return authColors.error;
-    case "ROLE_DISPATCHER":
-      return authColors.roleAccent;
-    case "ROLE_DRIVER":
-      return authColors.teal400;
-    default:
-      return authColors.textMuted;
-  }
-}
-
-function roleBg(role: string): string {
-  switch (role) {
-    case "ROLE_ADMIN":
-      return authColors.errorBg;
-    case "ROLE_DISPATCHER":
-      return authColors.roleActiveBg;
-    case "ROLE_DRIVER":
-      return "rgba(45,212,191,0.12)";
-    default:
-      return "rgba(100,116,139,0.12)";
-  }
-}
-
-function formatTimestamp(ts: number): string {
-  const now = Date.now();
-  const diff = now - ts;
-  if (diff < 60_000) return "now";
-  if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3600_000)}h`;
-  const d = new Date(ts);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-// ─── Contact Row ──────────────────────────────────────────────────────────────
-interface ContactRowProps {
-  contact: Contact;
-  lastMessage: string | null;
-  lastTs: number | null;
-  unread: number;
-  onPress: () => void;
-}
-
-function ContactRow({ contact, lastMessage, lastTs, unread, onPress }: ContactRowProps) {
-  const initials = contact.name
-    .split(" ")
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase())
-    .join("");
-
-  const rColor = roleColor(contact.role);
-  const rBg = roleBg(contact.role);
-
-  return (
-    <TouchableOpacity style={styles.contactRow} onPress={onPress} activeOpacity={0.75}>
-      {/* Avatar */}
-      <View style={[styles.avatarWrap, { borderColor: rColor }]}>
-        <Text style={[styles.avatarText, { color: rColor }]}>{initials}</Text>
-        {contact.isOnline && <View style={styles.onlineDot} />}
-      </View>
-
-      {/* Info */}
-      <View style={styles.contactInfo}>
-        <View style={styles.contactTop}>
-          <Text style={styles.contactName} numberOfLines={1}>
-            {contact.name}
-          </Text>
-          {lastTs && (
-            <Text style={styles.lastTime}>{formatTimestamp(lastTs)}</Text>
-          )}
-        </View>
-        <View style={styles.contactBottom}>
-          <View style={[styles.roleBadge, { backgroundColor: rBg, borderColor: rColor }]}>
-            <Text style={[styles.roleBadgeText, { color: rColor }]}>
-              {roleLabel(contact.role)}
-            </Text>
-          </View>
-          {lastMessage ? (
-            <Text style={styles.lastMsg} numberOfLines={1}>
-              {lastMessage}
-            </Text>
-          ) : (
-            <Text style={styles.noMsg}>Tap to start chatting</Text>
-          )}
-          {unread > 0 && (
-            <View style={styles.unreadBadge}>
-              <Text style={styles.unreadText}>{unread > 99 ? "99+" : unread}</Text>
-            </View>
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-// ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function TeamChatScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
-  const { contacts, loadingContacts, loadContacts, getLastMessage, getUnread } =
+  const { contacts, loadingContacts, loadConversations, getLastMessage, getUnread, getOrCreateConversation } =
     useChatStore();
 
+  const [search, setSearch] = useState("");
+  const [activeTab, setActiveTab] = useState<"All" | "Team" | "Groups">("All");
+
+  const [showUsersModal, setShowUsersModal] = useState(false);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [userSearch, setUserSearch] = useState("");
+
   useEffect(() => {
-    loadContacts(user?.id ?? "0");
+    if (user?.id) {
+      loadConversations(user.id);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user?.id]);
 
-  const openChat = useCallback(
-    (contact: Contact) => {
-      navigation.navigate("ChatRoom", { contact });
-    },
-    [navigation]
-  );
+  const filteredContacts = contacts.filter((c) => {
+    const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase());
+    if (!matchesSearch) return false;
+    if (activeTab === "Team") return c.role === "ROLE_DISPATCHER" || c.role === "ROLE_ADMIN";
+    if (activeTab === "Groups") return c.role === "ROLE_DRIVER";
+    return true;
+  });
 
-  const renderItem = useCallback(
-    ({ item }: { item: Contact }) => {
-      const last = getLastMessage(item.id);
-      return (
-        <ContactRow
-          contact={item}
-          lastMessage={last ? last.text : null}
-          lastTs={last ? last.timestamp : null}
-          unread={getUnread(item.id)}
-          onPress={() => openChat(item)}
-        />
-      );
-    },
-    [getLastMessage, getUnread, openChat]
-  );
+  const fetchAllUsers = async () => {
+    setLoadingUsers(true);
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (token === "demo-jwt-token" || token === "demo-token") {
+        const mockUsers = [
+          { id: "1", name: "Aisha Khan (Admin)", role: "ROLE_ADMIN", isOnline: true },
+          { id: "2", name: "Sara Torres (Dispatcher)", role: "ROLE_DISPATCHER", isOnline: true },
+          { id: "3", name: "Alex Driver", role: "ROLE_DRIVER", isOnline: false },
+          { id: "4", name: "John Doe", role: "ROLE_DRIVER", isOnline: true },
+        ];
+        setAllUsers(mockUsers.filter((u) => u.id !== user?.id));
+        setLoadingUsers(false);
+        return;
+      }
 
-  const keyExtractor = useCallback((item: Contact) => item.id, []);
+      const res = await axios.get(GetDrivers);
+      const fetchedUsers = res.data?.data || res.data?.serviceResult || [];
+      // Filter out the current user
+      setAllUsers(fetchedUsers.filter((u: any) => String(u._id || u.id) !== user?.id));
+    } catch (err) {
+      console.log("Error fetching users", err);
+    }
+    setLoadingUsers(false);
+  };
 
-  const totalUnread = contacts.reduce((sum, c) => sum + getUnread(c.id), 0);
+  const handleOpenUsersModal = () => {
+    setShowUsersModal(true);
+    fetchAllUsers();
+  };
+
+  const handleStartChat = async (targetUser: any) => {
+    setShowUsersModal(false);
+    const contactId = String(targetUser._id || targetUser.id);
+    
+    // Attempt to pre-create or fetch the conversation
+    await getOrCreateConversation(contactId);
+    
+    // We also want to refresh conversations so it appears in the list if it already existed
+    if (user?.id) {
+      loadConversations(user.id);
+    }
+    
+    navigation.navigate("ChatRoom", {
+      contact: {
+        id: contactId,
+        name: targetUser.name,
+        role: targetUser.role,
+        isOnline: targetUser.isOnline || false,
+        avatar: targetUser.avatar,
+      }
+    });
+  };
 
   return (
-    <ScreenWrapper title="Team Chat">
-      {/* Header banner */}
-      <View style={styles.headerBanner}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>Messages</Text>
-          {totalUnread > 0 && (
-            <View style={styles.totalUnreadBadge}>
-              <Text style={styles.totalUnreadText}>{totalUnread} unread</Text>
-            </View>
-          )}
+    <ScreenWrapper title="Chats with Team">
+      <View style={styles.container}>
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search conversations..."
+            placeholderTextColor={authColors.textMuted}
+            value={search}
+            onChangeText={setSearch}
+          />
         </View>
-        <Text style={styles.headerSub}>
-          {contacts.length} team member{contacts.length !== 1 ? "s" : ""}
-        </Text>
-      </View>
 
-      {loadingContacts ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={authColors.roleAccent} />
-          <Text style={styles.loadingText}>Loading contacts…</Text>
+        {/* Tab Switcher */}
+        <View style={styles.tabContainer}>
+          {(["All", "Team", "Groups"] as const).map((tab) => (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.tabBtn, activeTab === tab && styles.tabBtnActive]}
+              onPress={() => setActiveTab(tab)}
+            >
+              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                {tab}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
-      ) : contacts.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>👥</Text>
-          <Text style={styles.emptyTitle}>No contacts found</Text>
-          <Text style={styles.emptySubtitle}>Pull down to refresh the team list</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={contacts}
-          renderItem={renderItem}
-          keyExtractor={keyExtractor}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-        />
-      )}
+
+        {/* Conversation List */}
+        {loadingContacts ? (
+          <View style={styles.centerContainer}>
+            <ActivityIndicator size="large" color={authColors.roleAccent} />
+          </View>
+        ) : filteredContacts.length === 0 ? (
+          <View style={styles.centerContainer}>
+            <Text style={styles.emptyText}>No conversations found</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={filteredContacts}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => {
+              const lastMsg = getLastMessage(item.id);
+              const unread = getUnread(item.id);
+              return (
+                <TouchableOpacity
+                  style={styles.contactCard}
+                  onPress={() => navigation.navigate("ChatRoom", { contact: item })}
+                >
+                  <View style={styles.avatarWrap}>
+                    <Text style={styles.avatarText}>
+                      {item.name?.[0]?.toUpperCase() || "U"}
+                    </Text>
+                    {item.isOnline && <View style={styles.onlineBadge} />}
+                  </View>
+
+                  <View style={styles.infoCol}>
+                    <View style={styles.nameRow}>
+                      <Text style={styles.nameText}>{item.name}</Text>
+                      <Text style={styles.timeText}>
+                        {lastMsg ? new Date(lastMsg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "10:30 AM"}
+                      </Text>
+                    </View>
+                    <Text style={styles.msgText} numberOfLines={1}>
+                      {lastMsg ? lastMsg.text : "Trip TRP-1045 assigned to you."}
+                    </Text>
+                  </View>
+
+                  {unread > 0 && (
+                    <View style={styles.unreadCountBadge}>
+                      <Text style={styles.unreadCountText}>{unread}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            }}
+          />
+        )}
+
+        {/* Floating Action Button */}
+        <TouchableOpacity style={styles.fab} onPress={handleOpenUsersModal}>
+          <Text style={styles.fabIcon}>+</Text>
+        </TouchableOpacity>
+
+        {/* Users List Modal */}
+        {showUsersModal && (
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>New Chat</Text>
+                <TouchableOpacity onPress={() => setShowUsersModal(false)}>
+                  <Text style={styles.modalCloseText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search user by name..."
+                placeholderTextColor={authColors.textMuted}
+                value={userSearch}
+                onChangeText={setUserSearch}
+              />
+
+              {loadingUsers ? (
+                <View style={styles.centerContainer}>
+                  <ActivityIndicator size="small" color={authColors.roleAccent} />
+                </View>
+              ) : (
+                <FlatList
+                  data={allUsers.filter((u) => u.name.toLowerCase().includes(userSearch.toLowerCase()))}
+                  keyExtractor={(item, index) => item._id || item.id || String(index)}
+                  contentContainerStyle={{ paddingVertical: 10 }}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity style={styles.contactCard} onPress={() => handleStartChat(item)}>
+                      <View style={styles.avatarWrap}>
+                        <Text style={styles.avatarText}>{item.name?.[0]?.toUpperCase() || "U"}</Text>
+                      </View>
+                      <View style={styles.infoCol}>
+                        <Text style={styles.nameText}>{item.name}</Text>
+                        <Text style={styles.timeText}>{item.role.replace("ROLE_", "")}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  )}
+                />
+              )}
+            </View>
+          </View>
+        )}
+      </View>
     </ScreenWrapper>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  headerBanner: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+  container: { flex: 1, padding: 16 },
+  searchContainer: { marginBottom: 12 },
+  searchInput: {
     backgroundColor: authColors.inputBg,
-    borderBottomWidth: 1,
-    borderBottomColor: authColors.cardBorder,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: authColors.textPrimary,
-  },
-  totalUnreadBadge: {
-    backgroundColor: authColors.roleActiveBg,
-    borderWidth: 1,
-    borderColor: authColors.roleActiveBorder,
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  totalUnreadText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: authColors.roleAccent,
-  },
-  headerSub: {
-    fontSize: 12,
-    color: authColors.textMuted,
-  },
-
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 12,
-  },
-  loadingText: {
-    fontSize: 14,
-    color: authColors.textMuted,
-  },
-
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 8,
-    paddingBottom: 60,
-  },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: 8,
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: authColors.textSecondary,
-  },
-  emptySubtitle: {
-    fontSize: 13,
-    color: authColors.textMuted,
-  },
-
-  list: {
-    paddingTop: 8,
-    paddingBottom: 24,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: authColors.divider,
-    marginLeft: 76,
-  },
-
-  // ── Contact Row ─────────────────────────────────────────────────────────────
-  contactRow: {
-    flexDirection: "row",
-    alignItems: "center",
+    borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 10,
+    color: authColors.textPrimary,
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: authColors.cardBorder,
+  },
+  tabContainer: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 16,
+  },
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: authColors.inputBg,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: authColors.cardBorder,
+  },
+  tabBtnActive: {
+    backgroundColor: authColors.roleAccent,
+    borderColor: authColors.roleAccent,
+  },
+  tabText: { color: authColors.textMuted, fontSize: 12, fontWeight: "600" },
+  tabTextActive: { color: "#FFFFFF" },
+  centerContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+  emptyText: { color: authColors.textMuted, fontSize: 14 },
+  contactCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: authColors.cardBg,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: authColors.cardBorder,
     gap: 12,
   },
   avatarWrap: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: authColors.cardBg,
-    borderWidth: 2,
-    justifyContent: "center",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: authColors.roleActiveBg,
     alignItems: "center",
+    justifyContent: "center",
     position: "relative",
   },
-  avatarText: {
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  onlineDot: {
+  avatarText: { color: authColors.roleAccent, fontWeight: "700", fontSize: 16 },
+  onlineBadge: {
     position: "absolute",
-    bottom: 1,
-    right: 1,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: authColors.success,
-    borderWidth: 2,
-    borderColor: authColors.pageBg,
+    bottom: 2,
+    right: 2,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#10B981",
+    borderWidth: 1.5,
+    borderColor: authColors.cardBg,
   },
-  contactInfo: {
-    flex: 1,
-    gap: 5,
+  infoCol: { flex: 1 },
+  nameRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  nameText: { fontSize: 14, fontWeight: "700", color: authColors.textPrimary },
+  timeText: { fontSize: 11, color: authColors.textMuted },
+  msgText: { fontSize: 12, color: authColors.textMuted, marginTop: 2 },
+  unreadCountBadge: {
+    backgroundColor: "#EF4444",
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
   },
-  contactTop: {
+  unreadCountText: { color: "#FFFFFF", fontSize: 10, fontWeight: "700" },
+  fab: {
+    position: "absolute",
+    bottom: 24,
+    right: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: authColors.roleAccent,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: authColors.roleAccent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  fabIcon: {
+    color: "#FFFFFF",
+    fontSize: 32,
+    fontWeight: "400",
+    lineHeight: 34,
+  },
+  modalOverlay: {
+    position: "absolute",
+    top: 0, bottom: 0, left: 0, right: 0,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: authColors.pageBg,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    height: "80%",
+    padding: 16,
+  },
+  modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginBottom: 16,
   },
-  contactName: {
-    fontSize: 15,
-    fontWeight: "600",
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
     color: authColors.textPrimary,
-    flex: 1,
-    marginRight: 8,
   },
-  lastTime: {
-    fontSize: 11,
-    color: authColors.textMuted,
-  },
-  contactBottom: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  roleBadge: {
-    borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  roleBadgeText: {
-    fontSize: 9,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
-  lastMsg: {
-    fontSize: 12,
-    color: authColors.textMuted,
-    flex: 1,
-  },
-  noMsg: {
-    fontSize: 12,
-    color: authColors.textMuted,
-    fontStyle: "italic",
-    flex: 1,
-  },
-  unreadBadge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: authColors.roleAccent,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 5,
-  },
-  unreadText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: authColors.darkText,
+  modalCloseText: {
+    fontSize: 14,
+    color: authColors.roleAccent,
+    fontWeight: "600",
   },
 });

@@ -25,6 +25,7 @@ import {
 import { authColors } from "../colors/colors";
 import useAuthStore from "../store/AuthStore";
 import useChatStore, { Contact, ChatMessage } from "../store/ChatStore";
+import { socketService } from "../services/socketService";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const IMAGE_BUBBLE_W = SCREEN_W * 0.6;
@@ -238,7 +239,7 @@ export default function ChatRoomScreen() {
   const contact: Contact = route.params?.contact;
 
   const { user } = useAuthStore();
-  const { getMessages, sendMessage, markRead, conversations } = useChatStore();
+  const { fetchMessages, getMessages, sendMessage, markRead, conversations } = useChatStore();
 
   const [inputText, setInputText] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -246,25 +247,61 @@ export default function ChatRoomScreen() {
   const [lightboxUri, setLightboxUri] = useState<string | null>(null);
   const [pendingMedia, setPendingMedia] = useState<Asset | null>(null);
   const flatListRef = useRef<FlatList>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const messages = getMessages(contact.id);
+  const conv = conversations[contact.id];
+
+  useEffect(() => {
+    if (conv?.conversationId) {
+      fetchMessages(conv.conversationId, contact.id);
+      socketService.joinConversation(conv.conversationId);
+      
+      // Listen to typing events
+      socketService.on('typing:start', (data) => {
+        if (data.conversationId === conv.conversationId && String(data.userId) === contact.id) {
+          setIsTyping(true);
+        }
+      });
+
+      socketService.on('typing:stop', (data) => {
+        if (data.conversationId === conv.conversationId && String(data.userId) === contact.id) {
+          setIsTyping(false);
+        }
+      });
+    }
+    
+    return () => {
+      if (conv?.conversationId) {
+        socketService.leaveConversation(conv.conversationId);
+        // We shouldn't necessarily remove ALL listeners here, but if we do, it cleans up
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conv?.conversationId, contact.id]);
 
   useEffect(() => {
     markRead(contact.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contact.id]);
+  }, [contact.id, messages.length]);
 
-  const conv = conversations[contact.id];
   useEffect(() => {
     if (!conv) return;
-    const last = conv.messages[conv.messages.length - 1];
-    if (last && last.senderId !== "me") {
-      setIsTyping(false);
-      markRead(contact.id);
-    }
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 80);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conv?.messages?.length]);
+  }, [messages.length]);
+
+  const handleInputChange = (text: string) => {
+    setInputText(text);
+    if (conv?.conversationId) {
+      socketService.sendTypingStart(conv.conversationId);
+      
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => {
+        socketService.sendTypingStop(conv.conversationId!);
+      }, 1500);
+    }
+  };
 
   // ─── Media picker ──────────────────────────────────────────────────────────
   const handlePickerResponse = useCallback((res: ImagePickerResponse) => {
@@ -309,16 +346,18 @@ export default function ChatRoomScreen() {
       pendingMedia?.fileName
     );
 
+    if (conv?.conversationId) {
+      socketService.sendTypingStop(conv.conversationId);
+    }
+
     setInputText("");
     setPendingMedia(null);
-    setIsTyping(true);
-    setTimeout(() => setIsTyping(false), 3200);
-  }, [inputText, pendingMedia, contact.id, user?.name, sendMessage]);
+  }, [inputText, pendingMedia, contact.id, user?.name, sendMessage, conv?.conversationId]);
 
   // ─── Render ────────────────────────────────────────────────────────────────
   const renderItem = useCallback(
     ({ item, index }: { item: ChatMessage; index: number }) => {
-      const isMe = item.senderId === "me";
+      const isMe = item.senderId === "me" || String(item.senderId) === String(user?.id) || String(item.senderId) === String(user?._id);
       const prevTs = index > 0 ? messages[index - 1].timestamp : null;
       const showDate =
         !prevTs ||
@@ -431,7 +470,7 @@ export default function ChatRoomScreen() {
           <TextInput
             style={styles.textInput}
             value={inputText}
-            onChangeText={setInputText}
+            onChangeText={handleInputChange}
             placeholder={`Message ${contact.name.split(" ")[0]}…`}
             placeholderTextColor={authColors.textMuted}
             multiline

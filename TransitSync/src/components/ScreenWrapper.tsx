@@ -5,131 +5,168 @@ import {
   Text,
   TouchableOpacity,
   Modal,
-  ScrollView,
   Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { authColors } from "../colors/colors";
 import useAuthStore from "../store/AuthStore";
+import BottomNavBar from "./BottomNavBar";
 
 interface ScreenWrapperProps {
   children: React.ReactNode;
   title: string;
+  hideBottomNav?: boolean;
 }
 
-export default function ScreenWrapper({ children, title }: ScreenWrapperProps) {
-  const [menuVisible, setMenuVisible] = useState(false);
+export default function ScreenWrapper({
+  children,
+  title,
+  hideBottomNav = false,
+}: ScreenWrapperProps) {
   const navigation = useNavigation<any>();
   const route = useRoute();
   const { user, logout } = useAuthStore();
+  const [roleModalVisible, setRoleModalVisible] = useState(false);
 
   const handleLogout = async () => {
-    setMenuVisible(false);
+    setRoleModalVisible(false);
     await logout();
-    navigation.replace("Login");
   };
 
-  const navItems = [
-    { label: "Dashboard", screen: "Dashboard", icon: "📊" },
-    { label: "Driver Navigation", screen: "DriverNavigation", icon: "🗺️" },
-    { label: "Vehicle Registry", screen: "Vehicles", icon: "🚚" },
-    { label: "Drivers Profiles", screen: "Drivers", icon: "👥" },
-    { label: "Trip Dispatcher", screen: "Dispatch", icon: "📋" },
-    { label: "Trip Expenses", screen: "Expenses", icon: "💰" },
-    { label: "Team Chat", screen: "TeamChat", icon: "💬" },
-    { label: "AI Assistant", screen: "Chat", icon: "🤖" },
-    { label: "Settings", screen: "Settings", icon: "⚙️" },
-  ];
-
-  const navigateTo = (screenName: string) => {
-    setMenuVisible(false);
-    if (route.name !== screenName) {
-      navigation.navigate(screenName);
+  const handleSwitchRole = async (newRole: string) => {
+    setRoleModalVisible(false);
+    if (user) {
+      user.role = newRole;
     }
+    // Refresh current screen to apply role tabs
+    navigation.navigate(route.name);
   };
+
+  const userRoleLabel =
+    user?.role === "ROLE_DISPATCHER"
+      ? "Dispatcher"
+      : user?.role === "ROLE_ADMIN"
+      ? "Admin"
+      : "Driver";
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["top", "left", "right", "bottom"]}>
+    <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
+      {/* App Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.menuButton} onPress={() => setMenuVisible(true)}>
-          <Text style={styles.menuButtonText}>☰</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{title}</Text>
+        <View style={styles.headerLeft}>
+          <Image
+            source={require("../assets/ChatGPT Image Aug 23, 2026, 08_28_18 PM.png")}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
+          <View>
+            <Text style={styles.headerBrand}>
+              Transit<Text style={styles.brandAccent}>Sync</Text>
+            </Text>
+            <Text style={styles.headerSubtitle}>{title}</Text>
+          </View>
+        </View>
+
+        {/* Role Switcher Pill & Profile */}
         <View style={styles.headerRight}>
-          <Text style={styles.statusDot}>🟢</Text>
+          <TouchableOpacity
+            style={styles.roleBadge}
+            onPress={() => setRoleModalVisible(true)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.roleBadgeText}>{userRoleLabel} ⚡</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.avatarButton}
+            onPress={() => navigation.navigate("Settings")}
+          >
+            <Text style={styles.avatarText}>
+              {user?.name?.[0]?.toUpperCase() || "U"}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
 
+      {/* Main Content Area */}
       <View style={styles.content}>{children}</View>
 
-      {/* Slide-out Sidebar Drawer Modal */}
+      {/* Animated Bottom Navigation Bar */}
+      {!hideBottomNav && <BottomNavBar />}
+
+      {/* Role Switcher Modal */}
       <Modal
-        visible={menuVisible}
+        visible={roleModalVisible}
         transparent
-        animationType="none"
-        onRequestClose={() => setMenuVisible(false)}
+        animationType="fade"
+        onRequestClose={() => setRoleModalVisible(false)}
       >
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
-          onPress={() => setMenuVisible(false)}
+          onPress={() => setRoleModalVisible(false)}
         >
-          <View style={styles.sidebarContainer}>
-            <SafeAreaView style={styles.sidebarSafeArea} edges={["top", "bottom", "left"]}>
-              <View style={styles.sidebarHeader}>
-                <View style={styles.sidebarLogoRow}>
-                  <Image
-                    source={require("../assets/ChatGPT Image Aug 23, 2026, 08_28_18 PM.png")}
-                    style={styles.sidebarLogoImage}
-                    resizeMode="contain"
-                  />
-                  <View>
-                    <Text style={styles.logoText}>Transit<Text style={styles.logoAccent}>Sync</Text></Text>
-                    <Text style={styles.logoSubtitle}>Dispatch Console</Text>
-                  </View>
-                </View>
+          <View style={styles.roleCard}>
+            <Text style={styles.roleTitle}>Switch View Mode</Text>
+            <Text style={styles.roleSubtitle}>
+              Experience UI custom tailored for each role
+            </Text>
+
+            <TouchableOpacity
+              style={[
+                styles.roleOption,
+                user?.role === "ROLE_DRIVER" && styles.roleOptionActive,
+              ]}
+              onPress={() => handleSwitchRole("ROLE_DRIVER")}
+            >
+              <Text style={styles.roleOptionIcon}>🚗</Text>
+              <View>
+                <Text style={styles.roleOptionTitle}>Driver / Team View</Text>
+                <Text style={styles.roleOptionDesc}>
+                  3-Phase bottom tabs: AI Chatbot, Team Chat, Mess It Up
+                </Text>
               </View>
+            </TouchableOpacity>
 
-              {user && (
-                <View style={styles.userInfo}>
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>{user.name?.[0]?.toUpperCase() || "U"}</Text>
-                  </View>
-                  <View>
-                    <Text style={styles.userName}>{user.name || "User"}</Text>
-                    <Text style={styles.userRole}>
-                      {user.role === "ROLE_DISPATCHER" ? "Dispatcher" : user.role === "ROLE_DRIVER" ? "Driver" : "Administrator"}
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              <ScrollView style={styles.navScroll}>
-                {navItems.map((item) => {
-                  const isActive = route.name === item.screen;
-                  return (
-                    <TouchableOpacity
-                      key={item.screen}
-                      style={[styles.navItem, isActive && styles.navItemActive]}
-                      onPress={() => navigateTo(item.screen)}
-                    >
-                      <Text style={styles.navIcon}>{item.icon}</Text>
-                      <Text style={[styles.navItemText, isActive && styles.navItemTextActive]}>
-                        {item.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-
-              <View style={styles.sidebarFooter}>
-                <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-                  <Text style={styles.logoutIcon}>🚪</Text>
-                  <Text style={styles.logoutText}>Logout</Text>
-                </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.roleOption,
+                user?.role === "ROLE_DISPATCHER" && styles.roleOptionActive,
+              ]}
+              onPress={() => handleSwitchRole("ROLE_DISPATCHER")}
+            >
+              <Text style={styles.roleOptionIcon}>🗺️</Text>
+              <View>
+                <Text style={styles.roleOptionTitle}>Dispatcher View</Text>
+                <Text style={styles.roleOptionDesc}>
+                  Live Operations Map, Assign Driver sheet, Vehicle details
+                </Text>
               </View>
-            </SafeAreaView>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.roleOption,
+                user?.role === "ROLE_ADMIN" && styles.roleOptionActive,
+              ]}
+              onPress={() => handleSwitchRole("ROLE_ADMIN")}
+            >
+              <Text style={styles.roleOptionIcon}>📊</Text>
+              <View>
+                <Text style={styles.roleOptionTitle}>Admin Panel View</Text>
+                <Text style={styles.roleOptionDesc}>
+                  Dashboard metrics, Fleet management, Reports & Analytics
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.logoutRow}
+              onPress={handleLogout}
+            >
+              <Text style={styles.logoutText}>🚪 Logout Session</Text>
+            </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -143,7 +180,7 @@ const styles = StyleSheet.create({
     backgroundColor: authColors.pageBg,
   },
   header: {
-    height: 56,
+    height: 60,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -152,24 +189,61 @@ const styles = StyleSheet.create({
     borderBottomColor: authColors.cardBorder,
     backgroundColor: authColors.inputBg,
   },
-  menuButton: {
-    padding: 4,
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
-  menuButtonText: {
-    fontSize: 24,
-    color: authColors.textPrimary,
+  logoImage: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
   },
-  headerTitle: {
+  headerBrand: {
     fontSize: 18,
-    fontWeight: "700",
+    fontWeight: "800",
     color: authColors.textPrimary,
+  },
+  brandAccent: {
+    color: authColors.roleAccent,
+  },
+  headerSubtitle: {
+    fontSize: 11,
+    color: authColors.textMuted,
+    fontWeight: "500",
   },
   headerRight: {
-    width: 32,
-    alignItems: "flex-end",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
-  statusDot: {
+  roleBadge: {
+    backgroundColor: "rgba(37, 99, 235, 0.15)",
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(37, 99, 235, 0.3)",
+  },
+  roleBadgeText: {
+    color: authColors.roleAccent,
     fontSize: 12,
+    fontWeight: "700",
+  },
+  avatarButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: authColors.roleActiveBg,
+    borderWidth: 1,
+    borderColor: authColors.roleActiveBorder,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: authColors.roleAccent,
   },
   content: {
     flex: 1,
@@ -177,132 +251,66 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-  },
-  sidebarContainer: {
-    width: "75%",
-    height: "100%",
-    backgroundColor: authColors.cardBg,
-    borderRightWidth: 1,
-    borderRightColor: authColors.cardBorder,
-  },
-  sidebarSafeArea: {
-    flex: 1,
-  },
-  sidebarHeader: {
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: authColors.cardBorder,
-  },
-  sidebarLogoRow: {
-    flexDirection: "row",
+    backgroundColor: "rgba(0,0,0,0.7)",
     alignItems: "center",
-    gap: 12,
+    justifyContent: "center",
+    padding: 20,
   },
-  sidebarLogoImage: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
+  roleCard: {
+    width: "100%",
+    backgroundColor: authColors.cardBg,
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: authColors.cardBorder,
   },
-  logoText: {
-    fontSize: 24,
-    fontWeight: "800",
+  roleTitle: {
+    fontSize: 18,
+    fontWeight: "700",
     color: authColors.textPrimary,
   },
-  logoAccent: {
-    color: authColors.roleAccent,
+  roleSubtitle: {
+    fontSize: 12,
+    color: authColors.textMuted,
+    marginBottom: 16,
+    marginTop: 2,
   },
-  logoSubtitle: {
+  roleOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: authColors.inputBg,
+    marginBottom: 10,
+    gap: 12,
+  },
+  roleOptionActive: {
+    borderWidth: 1.5,
+    borderColor: authColors.roleAccent,
+    backgroundColor: "rgba(37, 99, 235, 0.1)",
+  },
+  roleOptionIcon: {
+    fontSize: 22,
+  },
+  roleOptionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: authColors.textPrimary,
+  },
+  roleOptionDesc: {
     fontSize: 11,
     color: authColors.textMuted,
     marginTop: 2,
-    textTransform: "uppercase",
-    letterSpacing: 1.5,
+    maxWidth: 220,
   },
-  userInfo: {
-    flexDirection: "row",
+  logoutRow: {
+    marginTop: 10,
     alignItems: "center",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: authColors.cardBorder,
-    backgroundColor: "rgba(255,255,255,0.02)",
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: authColors.roleActiveBg,
-    borderWidth: 1,
-    borderColor: authColors.roleActiveBorder,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  avatarText: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: authColors.roleAccent,
-  },
-  userName: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: authColors.textPrimary,
-  },
-  userRole: {
-    fontSize: 12,
-    color: authColors.textMuted,
-    marginTop: 2,
-  },
-  navScroll: {
-    flex: 1,
-    paddingVertical: 12,
-  },
-  navItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    marginHorizontal: 8,
-    marginVertical: 2,
-    borderRadius: 8,
-  },
-  navItemActive: {
-    backgroundColor: authColors.roleActiveBg,
-    borderWidth: 1,
-    borderColor: authColors.roleActiveBorder,
-  },
-  navIcon: {
-    fontSize: 16,
-    marginRight: 12,
-  },
-  navItemText: {
-    fontSize: 14,
-    color: authColors.textSecondary,
-    fontWeight: "500",
-  },
-  navItemTextActive: {
-    color: authColors.roleAccent,
-    fontWeight: "600",
-  },
-  sidebarFooter: {
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: authColors.cardBorder,
-  },
-  logoutButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-  },
-  logoutIcon: {
-    fontSize: 16,
-    marginRight: 12,
+    paddingVertical: 10,
   },
   logoutText: {
-    fontSize: 14,
     color: authColors.deleteText,
     fontWeight: "600",
+    fontSize: 13,
   },
 });

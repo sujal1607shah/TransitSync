@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import axios from "../api/axiosClient";
-import { GetDrivers } from "../api/apiPath";
+import { GetDrivers, Signup } from "../api/apiPath";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 interface DriverState {
   loading: boolean;
@@ -10,6 +11,7 @@ interface DriverState {
   fetchDrivers: () => Promise<{ success: boolean; data?: any; message?: string }>;
   getDrivers: () => Promise<{ success: boolean; data?: any; message?: string }>;
   clearDriver: () => void;
+  createDriver: (payload: any) => Promise<{ success: boolean; data?: any; message?: string }>;
 }
 
 const useDriverStore = create<DriverState>((set, get) => ({
@@ -47,6 +49,24 @@ const useDriverStore = create<DriverState>((set, get) => ({
 
   clearDriver: () => {
     set({ driver: null, error: null });
+  },
+
+  createDriver: async (payload: any) => {
+    try {
+      set({ loading: true, error: null });
+      try {
+        const response = await axios.post(Signup, payload);
+        set({ loading: false });
+        get().fetchDrivers(); // refresh list
+        return { success: true, data: response.data };
+      } catch (error: any) {
+        throw error;
+      }
+    } catch (error: any) {
+      const errMsg = error.response?.data?.message || "Failed to create driver";
+      set({ loading: false, error: errMsg });
+      return { success: false, message: errMsg };
+    }
   },
 }));
 

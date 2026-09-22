@@ -17,7 +17,7 @@ interface AuthState {
   signup: (payload: any) => Promise<{ success: boolean; data?: any; message?: string }>;
 }
 
-const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set) => ({
   loading: true,
   user: null,
   token: null,
@@ -28,6 +28,21 @@ const useAuthStore = create<AuthState>((set) => ({
     try {
       const token = await AsyncStorage.getItem("token");
       const user = await AsyncStorage.getItem("user");
+      
+      if (
+        token === "demo-jwt-token" || 
+        token === "demo-token" || 
+        token === "bearer-token-live" || 
+        token === "undefined" || 
+        !token || 
+        !token.startsWith("eyJ")
+      ) {
+        await AsyncStorage.removeItem("token");
+        await AsyncStorage.removeItem("user");
+        set({ token: null, user: null, loading: false, initialized: true });
+        return;
+      }
+
       set({
         token,
         user: user ? JSON.parse(user) : null,
@@ -43,44 +58,35 @@ const useAuthStore = create<AuthState>((set) => ({
   },
 
   login: async (email, password, role) => {
-    // Mock login for demo without backend
-    if (email === 'test@transitsync.com' && password === 'password') {
-      // Provide mock user based on role selection
-      const roleMap: Record<string, any> = {
-        ROLE_DISPATCHER: { id: 1, name: 'Demo Dispatcher', email, role: 'ROLE_DISPATCHER' },
-        ROLE_ADMIN: { id: 2, name: 'Demo Admin', email, role: 'ROLE_ADMIN' },
-        ROLE_DRIVER: { id: 3, name: 'Demo Driver', email, role: 'ROLE_DRIVER' },
-      };
-      const mockUser = roleMap[role] || { id: 0, name: 'Demo User', email, role };
-      await AsyncStorage.setItem('token', 'mock-token');
-      await AsyncStorage.setItem('user', JSON.stringify(mockUser));
-      set({ loading: false, user: mockUser, token: 'mock-token', error: null });
-      return { success: true, data: mockUser };
-    }
     try {
       set({ loading: true, error: null });
 
-      const response = await axios.post(Login, { email, password, role });
+      const response = await axios.post(Login, { email, password, role }, { timeout: 4000 });
       const data = response.data;
 
-      if (!data.success) {
-        set({ loading: false, error: data.message });
-        return { success: false, message: data.message };
+      if (data.success || response.status === 200) {
+        const userObj = data.data || data.serviceResult || data.user || { email, role };
+        const tokenStr = data.token || data.data?.token || data.serviceResult?.token;
+
+        if (!tokenStr) {
+          throw new Error("No token received from backend");
+        }
+
+        await AsyncStorage.setItem("token", tokenStr);
+        await AsyncStorage.setItem("user", JSON.stringify(userObj));
+
+        set({
+          loading: false,
+          user: userObj,
+          token: tokenStr,
+          error: null,
+        });
+
+        return { success: true, data: userObj };
       }
-
-      await AsyncStorage.setItem("token", data.serviceResult.token);
-      await AsyncStorage.setItem("user", JSON.stringify(data.serviceResult));
-
-      set({
-        loading: false,
-        user: data.serviceResult,
-        token: data.serviceResult.token,
-        error: null,
-      });
-
-      return { success: true, data: data.serviceResult };
+      throw new Error("Login failed");
     } catch (error: any) {
-      const errMsg = error.response?.data?.message || "Login failed";
+      const errMsg = error.response?.data?.message || error.message || "Login failed";
       set({ loading: false, error: errMsg });
       return { success: false, message: errMsg };
     }
@@ -130,80 +136,32 @@ const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  signup: async ({
-    name,
-    email,
-    password,
-    phoneNo,
-    licenseNo,
-    licenseExpiryDate,
-    role,
-    driverStatus,
-    safetyScore,
-    driverID,
-  }) => {
-    // Mock signup for demo without backend
-    if (email === 'test@transitsync.com' && password === 'password') {
-      const mockUser = { id: 99, name, email, role };
-      await AsyncStorage.setItem('token', 'mock-token');
-      await AsyncStorage.setItem('user', JSON.stringify(mockUser));
-      set({ loading: false, user: mockUser, token: 'mock-token', error: null });
-      return { success: true, data: { user: mockUser, token: 'mock-token' } };
-    }
+  signup: async (payload) => {
     try {
       set({ loading: true, error: null });
 
-      const payload: any = {
-        name,
-        email,
-        password,
-        phoneNo,
-        licenseNo,
-        licenseExpiryDate,
-        role,
-      };
-
-      if (driverStatus !== undefined) payload.driverStatus = driverStatus;
-      if (safetyScore !== undefined) payload.safetyScore = safetyScore;
-      if (driverID !== undefined) payload.driverID = driverID;
-
-      const authToken = await AsyncStorage.getItem("token");
-
-      const response = await axios.post(Signup, payload, {
-        headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
-      });
-
+      const response = await axios.post(Signup, payload, { timeout: 4000 });
       const data = response.data || {};
 
-      const extractToken = (resp: any) => {
-        const d = resp?.data || {};
-        if (d?.token) return d.token;
-        if (d?.accessToken) return d.accessToken;
-        if (d?.data?.token) return d.data.token;
+      const userObj = data.user || data.data || payload;
+      const tokenStr = data.token || data.data?.token;
 
-        if (resp?.headers?.authorization) {
-          const parts = resp.headers.authorization.split(" ");
-          return parts.length === 2 ? parts[1] : resp.headers.authorization;
-        }
-        return null;
-      };
-
-      const newToken = extractToken(response) || data.token || data.accessToken || null;
-
-      if (newToken) {
-        await AsyncStorage.setItem("token", newToken);
+      if (!tokenStr) {
+        throw new Error("No token received from backend during signup");
       }
+
+      await AsyncStorage.setItem("token", tokenStr);
+      await AsyncStorage.setItem("user", JSON.stringify(userObj));
 
       set({
         loading: false,
-        user: data.user || null,
-        token: newToken || authToken,
+        user: userObj,
+        token: tokenStr,
         error: null,
       });
 
-      return { success: true, data };
+      return { success: true, data: userObj };
     } catch (error: any) {
-      console.log("Signup Error:", error);
       const errMsg = error.response?.data?.message || error.message || "Signup failed";
       set({ loading: false, error: errMsg });
       return { success: false, message: errMsg };
