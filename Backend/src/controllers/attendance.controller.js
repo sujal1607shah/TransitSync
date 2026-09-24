@@ -23,7 +23,7 @@ const checkIn = async (req, res) => {
     const org = await Organization.findById(orgId);
     const geofenceConfig = org?.geofence?.latitude ? org.geofence : undefined;
 
-    const geofenceResult = verifyGeofence(latitude || 23.0225, longitude || 72.5714, geofenceConfig);
+    const geofenceResult = verifyGeofence(latitude || 23.0677813, longitude || 72.5519712, geofenceConfig);
 
     const attendance = await Attendance.create({
       organizationId: orgId,
@@ -31,8 +31,8 @@ const checkIn = async (req, res) => {
       date: dateStr,
       checkInTime: new Date(),
       checkInLocation: {
-        latitude: latitude || 23.0225,
-        longitude: longitude || 72.5714,
+        latitude: latitude || 23.0677813,
+        longitude: longitude || 72.5519712,
       },
       status: 'PRESENT',
       distanceFromGeofence: geofenceResult.distanceMeters,

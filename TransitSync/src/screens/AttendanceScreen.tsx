@@ -8,6 +8,7 @@ import {
   TextInput,
 } from "react-native";
 import ScreenWrapper from "../components/ScreenWrapper";
+import AttendanceStatusCard from "../components/AttendanceStatusCard";
 import { authColors } from "../colors/colors";
 import { isInsideGeofence, OFFICE_LOCATION, USER_LOCATION } from "../utils/geofence";
 
@@ -30,12 +31,15 @@ export default function AttendanceScreen() {
   };
 
   return (
-    <ScreenWrapper title="Mess It Up (Report Issue)">
+    <ScreenWrapper title="Duty Attendance & Issue Reports">
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        {/* Automated Geofence Attendance Card with Live Logs */}
+        <AttendanceStatusCard />
+
         {/* STEP 1: CATEGORY SELECTION & RECENT REPORTS */}
         {step === "CATEGORY" && (
           <View style={styles.stepSection}>
-            <Text style={styles.stepTitle}>⚠️ Report an Issue</Text>
+            <Text style={styles.stepTitle}>⚠️ Report an Issue (Mess It Up)</Text>
             <Text style={styles.stepDesc}>Report any breakdown, route problem or incident immediately.</Text>
 
             {/* Categories */}
@@ -87,17 +91,6 @@ export default function AttendanceScreen() {
                 <Text style={styles.categoryLabel}>Incident Report</Text>
                 <Text style={styles.categorySub}>Accident or emergency</Text>
               </TouchableOpacity>
-            </View>
-
-            {/* Attendance Quick Check */}
-            <View style={styles.attendanceBox}>
-              <Text style={styles.attendanceTitle}>📍 Duty Geofence Status</Text>
-              <View style={styles.attendanceRow}>
-                <Text style={styles.attendanceLabel}>Current Location Check:</Text>
-                <Text style={[styles.attendanceBadge, { color: present ? "#10B981" : "#EF4444" }]}>
-                  {present ? "In Office Geofence (Present)" : "On Field Route"}
-                </Text>
-              </View>
             </View>
 
             {/* Recent Reports */}

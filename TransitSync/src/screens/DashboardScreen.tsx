@@ -11,6 +11,7 @@ import {
   RefreshControl,
 } from "react-native";
 import ScreenWrapper from "../components/ScreenWrapper";
+import AttendanceStatusCard from "../components/AttendanceStatusCard";
 import { authColors } from "../colors/colors";
 import useAuthStore from "../store/AuthStore";
 import useTripStore from "../store/TripStore";
@@ -115,6 +116,9 @@ export default function DashboardScreen() {
                 <Text style={styles.dutyBadgeText}>On Duty</Text>
               </View>
             </View>
+
+            {/* Automated Geofence Attendance Card */}
+            <AttendanceStatusCard />
 
             {/* Today's Trip Card */}
             <View style={styles.tripCard}>

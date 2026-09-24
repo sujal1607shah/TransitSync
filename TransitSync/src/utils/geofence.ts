@@ -2,22 +2,23 @@
 // Pure JS geofencing using the Haversine formula — no native module required.
 
 export const OFFICE_LOCATION = {
-  latitude: 23.0676832,
-  longitude: 72.5519447,
+  latitude: 23.0677813,
+  longitude: 72.5519712,
+  name: "TransitSync Central Hub",
 };
 
 export const USER_LOCATION = {
-  latitude: 23.090619,
-  longitude: 72.5519447,
+  latitude: 23.0677813,
+  longitude: 72.5519712,
 };
 
-const RADIUS_METERS = 100;
+export const GEOFENCE_RADIUS_METERS = 200;
 
 /**
  * Calculates the distance in metres between two coordinates using the
  * Haversine formula.
  */
-function haversineDistance(
+export function haversineDistance(
   lat1: number,
   lon1: number,
   lat2: number,
@@ -34,15 +35,16 @@ function haversineDistance(
       Math.sin(dLon / 2) *
       Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
+  return Math.round(R * c);
 }
 
 /**
- * Returns true if the user coordinate lies within RADIUS_METERS of the office.
+ * Returns true if the user coordinate lies within GEOFENCE_RADIUS_METERS (200m) of the office/depot.
  */
 export const isInsideGeofence = (
   user: { latitude: number; longitude: number },
   office = OFFICE_LOCATION,
+  radiusMeters = GEOFENCE_RADIUS_METERS,
 ): boolean => {
   const distance = haversineDistance(
     user.latitude,
@@ -50,5 +52,5 @@ export const isInsideGeofence = (
     office.latitude,
     office.longitude,
   );
-  return distance <= RADIUS_METERS;
+  return distance <= radiusMeters;
 };
