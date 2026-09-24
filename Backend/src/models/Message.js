@@ -2,10 +2,15 @@ const mongoose = require('mongoose');
 
 const MessageSchema = new mongoose.Schema(
   {
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: [true, 'Organization ID is required'],
+      index: true,
+    },
     messageId: {
       type: String,
       required: true,
-      unique: true,
       index: true,
     },
     conversationId: {
@@ -60,5 +65,9 @@ const MessageSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+MessageSchema.index({ organizationId: 1, messageId: 1 }, { unique: true });
+MessageSchema.index({ organizationId: 1, conversationId: 1 });
+MessageSchema.index({ conversationId: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Message', MessageSchema);

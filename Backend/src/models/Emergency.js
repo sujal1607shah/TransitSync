@@ -2,10 +2,15 @@ const mongoose = require('mongoose');
 
 const EmergencySchema = new mongoose.Schema(
   {
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: [true, 'Organization ID is required'],
+      index: true,
+    },
     emergencyId: {
       type: String,
       required: true,
-      unique: true,
       index: true,
     },
     driverName: {
@@ -51,5 +56,8 @@ const EmergencySchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+EmergencySchema.index({ organizationId: 1, emergencyId: 1 }, { unique: true });
+EmergencySchema.index({ organizationId: 1, status: 1 });
 
 module.exports = mongoose.model('Emergency', EmergencySchema);

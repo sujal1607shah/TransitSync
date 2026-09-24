@@ -2,10 +2,15 @@ const mongoose = require('mongoose');
 
 const ProofOfDeliverySchema = new mongoose.Schema(
   {
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: [true, 'Organization ID is required'],
+      index: true,
+    },
     podId: {
       type: String,
       required: true,
-      unique: true,
       index: true,
     },
     tripID: {
@@ -53,5 +58,8 @@ const ProofOfDeliverySchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+ProofOfDeliverySchema.index({ organizationId: 1, podId: 1 }, { unique: true });
+ProofOfDeliverySchema.index({ organizationId: 1, tripID: 1 });
 
 module.exports = mongoose.model('ProofOfDelivery', ProofOfDeliverySchema);

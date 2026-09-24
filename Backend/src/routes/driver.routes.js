@@ -9,6 +9,6 @@ router.get('/:id', authenticateUser, getDriverById);
 router.post('/', authenticateUser, authorizeRoles('ADMIN', 'DISPATCHER'), createDriver);
 router.put('/:id', authenticateUser, updateDriver);
 router.patch('/:id/status', authenticateUser, updateDriverStatus);
-router.delete('/:id', authenticateUser, authorizeRoles('ADMIN'), deleteDriver);
+router.delete('/:id', authenticateUser, authorizeRoles('ADMIN', 'ROLE_ADMIN', 'DISPATCHER', 'ROLE_DISPATCHER'), deleteDriver);
 
 module.exports = router;

@@ -26,7 +26,7 @@ export default function ScreenWrapper({
 }: ScreenWrapperProps) {
   const navigation = useNavigation<any>();
   const route = useRoute();
-  const { user, logout } = useAuthStore();
+  const { user, organization, logout } = useAuthStore();
   const [roleModalVisible, setRoleModalVisible] = useState(false);
 
   const handleLogout = async () => {
@@ -50,6 +50,8 @@ export default function ScreenWrapper({
       ? "Admin"
       : "Driver";
 
+  const orgDisplay = organization?.code || user?.organizationCode || "TS-DEMO";
+
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
       {/* App Header */}
@@ -61,9 +63,14 @@ export default function ScreenWrapper({
             resizeMode="contain"
           />
           <View>
-            <Text style={styles.headerBrand}>
-              Transit<Text style={styles.brandAccent}>Sync</Text>
-            </Text>
+            <View style={styles.brandRow}>
+              <Text style={styles.headerBrand}>
+                Transit<Text style={styles.brandAccent}>Sync</Text>
+              </Text>
+              <View style={styles.orgBadge}>
+                <Text style={styles.orgBadgeText}>{orgDisplay}</Text>
+              </View>
+            </View>
             <Text style={styles.headerSubtitle}>{title}</Text>
           </View>
         </View>
@@ -107,27 +114,11 @@ export default function ScreenWrapper({
           activeOpacity={1}
           onPress={() => setRoleModalVisible(false)}
         >
-          <View style={styles.roleCard}>
-            <Text style={styles.roleTitle}>Switch View Mode</Text>
-            <Text style={styles.roleSubtitle}>
-              Experience UI custom tailored for each role
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Switch Workspace Role</Text>
+            <Text style={styles.modalSubtitle}>
+              Current Account: {user?.email}
             </Text>
-
-            <TouchableOpacity
-              style={[
-                styles.roleOption,
-                user?.role === "ROLE_DRIVER" && styles.roleOptionActive,
-              ]}
-              onPress={() => handleSwitchRole("ROLE_DRIVER")}
-            >
-              <Text style={styles.roleOptionIcon}>🚗</Text>
-              <View>
-                <Text style={styles.roleOptionTitle}>Driver / Team View</Text>
-                <Text style={styles.roleOptionDesc}>
-                  3-Phase bottom tabs: AI Chatbot, Team Chat, Mess It Up
-                </Text>
-              </View>
-            </TouchableOpacity>
 
             <TouchableOpacity
               style={[
@@ -136,11 +127,11 @@ export default function ScreenWrapper({
               ]}
               onPress={() => handleSwitchRole("ROLE_DISPATCHER")}
             >
-              <Text style={styles.roleOptionIcon}>🗺️</Text>
+              <Text style={styles.roleOptionIcon}>📋</Text>
               <View>
-                <Text style={styles.roleOptionTitle}>Dispatcher View</Text>
+                <Text style={styles.roleOptionTitle}>Dispatcher Console</Text>
                 <Text style={styles.roleOptionDesc}>
-                  Live Operations Map, Assign Driver sheet, Vehicle details
+                  Live ops, map dispatch, routes
                 </Text>
               </View>
             </TouchableOpacity>
@@ -152,20 +143,38 @@ export default function ScreenWrapper({
               ]}
               onPress={() => handleSwitchRole("ROLE_ADMIN")}
             >
-              <Text style={styles.roleOptionIcon}>📊</Text>
+              <Text style={styles.roleOptionIcon}>🛡️</Text>
               <View>
-                <Text style={styles.roleOptionTitle}>Admin Panel View</Text>
+                <Text style={styles.roleOptionTitle}>Admin Console</Text>
                 <Text style={styles.roleOptionDesc}>
-                  Dashboard metrics, Fleet management, Reports & Analytics
+                  Full fleet, financial reports, settings
                 </Text>
               </View>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.logoutRow}
+              style={[
+                styles.roleOption,
+                user?.role === "ROLE_DRIVER" && styles.roleOptionActive,
+              ]}
+              onPress={() => handleSwitchRole("ROLE_DRIVER")}
+            >
+              <Text style={styles.roleOptionIcon}>🚚</Text>
+              <View>
+                <Text style={styles.roleOptionTitle}>Driver View</Text>
+                <Text style={styles.roleOptionDesc}>
+                  Navigation, duties, attendance
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.modalDivider} />
+
+            <TouchableOpacity
+              style={styles.logoutOption}
               onPress={handleLogout}
             >
-              <Text style={styles.logoutText}>🚪 Logout Session</Text>
+              <Text style={styles.logoutOptionText}>🚪 Logout Session</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -180,31 +189,53 @@ const styles = StyleSheet.create({
     backgroundColor: authColors.pageBg,
   },
   header: {
-    height: 60,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: authColors.headerBg,
     borderBottomWidth: 1,
-    borderBottomColor: authColors.cardBorder,
-    backgroundColor: authColors.inputBg,
+    borderBottomColor: authColors.headerBorder,
+    gap: 8,
   },
   headerLeft: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    flex: 1,
+    marginRight: 6,
   },
   logoImage: {
     width: 36,
     height: 36,
     borderRadius: 8,
   },
+  brandRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexWrap: "wrap",
+  },
   headerBrand: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "800",
     color: authColors.textPrimary,
   },
   brandAccent: {
+    color: authColors.roleAccent,
+  },
+  orgBadge: {
+    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.3)",
+  },
+  orgBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
     color: authColors.roleAccent,
   },
   headerSubtitle: {
@@ -215,79 +246,79 @@ const styles = StyleSheet.create({
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 6,
+    flexShrink: 0,
   },
   roleBadge: {
-    backgroundColor: "rgba(37, 99, 235, 0.15)",
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 20,
+    backgroundColor: authColors.roleActiveBg,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "rgba(37, 99, 235, 0.3)",
+    borderColor: authColors.roleAccent,
   },
   roleBadgeText: {
-    color: authColors.roleAccent,
-    fontSize: 12,
+    fontSize: 10.5,
     fontWeight: "700",
+    color: authColors.roleAccent,
   },
   avatarButton: {
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: authColors.roleActiveBg,
-    borderWidth: 1,
-    borderColor: authColors.roleActiveBorder,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: authColors.roleAccent,
-  },
-  content: {
-    flex: 1,
-    backgroundColor: authColors.pageBg,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 20,
-  },
-  roleCard: {
-    width: "100%",
     backgroundColor: authColors.cardBg,
-    borderRadius: 16,
-    padding: 20,
     borderWidth: 1,
     borderColor: authColors.cardBorder,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  roleTitle: {
-    fontSize: 18,
+  avatarText: {
+    fontSize: 13,
     fontWeight: "700",
     color: authColors.textPrimary,
   },
-  roleSubtitle: {
+  content: {
+    flex: 1,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.65)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  modalContent: {
+    width: "100%",
+    backgroundColor: authColors.cardBg,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: authColors.cardBorder,
+    padding: 20,
+    gap: 12,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: authColors.textPrimary,
+  },
+  modalSubtitle: {
     fontSize: 12,
     color: authColors.textMuted,
-    marginBottom: 16,
-    marginTop: 2,
+    marginBottom: 4,
   },
   roleOption: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 12,
     padding: 12,
     borderRadius: 12,
     backgroundColor: authColors.inputBg,
-    marginBottom: 10,
-    gap: 12,
+    borderWidth: 1,
+    borderColor: authColors.cardBorder,
   },
   roleOptionActive: {
-    borderWidth: 1.5,
     borderColor: authColors.roleAccent,
-    backgroundColor: "rgba(37, 99, 235, 0.1)",
+    backgroundColor: authColors.roleActiveBg,
   },
   roleOptionIcon: {
     fontSize: 22,
@@ -301,16 +332,19 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: authColors.textMuted,
     marginTop: 2,
-    maxWidth: 220,
   },
-  logoutRow: {
-    marginTop: 10,
+  modalDivider: {
+    height: 1,
+    backgroundColor: authColors.cardBorder,
+    marginVertical: 4,
+  },
+  logoutOption: {
     alignItems: "center",
     paddingVertical: 10,
   },
-  logoutText: {
-    color: authColors.deleteText,
-    fontWeight: "600",
-    fontSize: 13,
+  logoutOptionText: {
+    color: authColors.error,
+    fontWeight: "700",
+    fontSize: 14,
   },
 });

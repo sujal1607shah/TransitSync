@@ -2,10 +2,15 @@ const mongoose = require('mongoose');
 
 const TripSchema = new mongoose.Schema(
   {
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: [true, 'Organization ID is required'],
+      index: true,
+    },
     tripID: {
       type: String,
       required: true,
-      unique: true,
       index: true,
     },
     source: {
@@ -90,5 +95,10 @@ const TripSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+TripSchema.index({ organizationId: 1, tripID: 1 }, { unique: true });
+TripSchema.index({ organizationId: 1, status: 1 });
+TripSchema.index({ organizationId: 1, driverID: 1 });
+TripSchema.index({ organizationId: 1, vehicleID: 1 });
 
 module.exports = mongoose.model('Trip', TripSchema);

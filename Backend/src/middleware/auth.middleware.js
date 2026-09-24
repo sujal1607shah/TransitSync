@@ -24,10 +24,38 @@ const authenticateUser = async (req, res, next) => {
     }
 
     req.user = user;
+    req.organizationId = user.organizationId ? user.organizationId.toString() : null;
     next();
   } catch (err) {
     return errorResponse(res, 401, 'Unauthorized: Token verification failed');
   }
 };
 
-module.exports = { authenticateUser };
+/**
+ * Optional authentication: if a Bearer token is provided, attaches req.user and req.organizationId;
+ * otherwise proceeds as unauthenticated without throwing 401.
+ */
+const optionalAuth = async (req, res, next) => {
+  try {
+    let token = null;
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+      token = req.headers.authorization.split(' ')[1];
+    } else if (req.query && req.query.token) {
+      token = req.query.token;
+    }
+
+    if (token) {
+      const decoded = jwt.verify(token, env.JWT_SECRET);
+      const user = await User.findById(decoded.userId).select('-password');
+      if (user && user.isActive) {
+        req.user = user;
+        req.organizationId = user.organizationId ? user.organizationId.toString() : null;
+      }
+    }
+  } catch (err) {
+    // ignore optional token error
+  }
+  next();
+};
+
+module.exports = { authenticateUser, optionalAuth };

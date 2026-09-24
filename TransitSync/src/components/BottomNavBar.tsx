@@ -54,14 +54,13 @@ export default function BottomNavBar() {
       { key: "drivers", label: "Drivers", screen: "Drivers", icon: "👥" },
     ];
   } else {
-    // Admin Role
+    // Admin Role (5 core destinations for optimal touch target & typography)
     tabs = [
       { key: "dash", label: "Dashboard", screen: "Dashboard", icon: "📊" },
       { key: "fleet", label: "Fleet", screen: "Vehicles", icon: "🚚" },
       { key: "drivers", label: "Drivers", screen: "Drivers", icon: "👥" },
-      { key: "chats", label: "Chats", screen: "TeamChat", icon: "💬", badge: badgeValue },
       { key: "trips", label: "Trips", screen: "Dispatch", icon: "📋" },
-      { key: "reports", label: "Reports", screen: "Expenses", icon: "📈" },
+      { key: "chats", label: "Chats", screen: "TeamChat", icon: "💬", badge: badgeValue },
     ];
   }
 
@@ -96,7 +95,7 @@ export default function BottomNavBar() {
     }
   };
 
-  const tabWidth = (SCREEN_WIDTH - 24) / tabs.length;
+  const tabWidth = (SCREEN_WIDTH - 16) / tabs.length;
   const indicatorTranslateX = animatedValue.interpolate({
     inputRange: tabs.map((_, i) => i),
     outputRange: tabs.map((_, i) => i * tabWidth),
@@ -163,8 +162,8 @@ const styles = StyleSheet.create({
     backgroundColor: authColors.cardBg,
     borderTopWidth: 1,
     borderTopColor: authColors.cardBorder,
-    paddingHorizontal: 12,
-    paddingTop: 8,
+    paddingHorizontal: 8,
+    paddingTop: 6,
     elevation: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -4 },
@@ -179,17 +178,17 @@ const styles = StyleSheet.create({
   },
   indicator: {
     position: "absolute",
-    height: 46,
-    backgroundColor: "rgba(37, 99, 235, 0.18)",
-    borderRadius: 23,
-    marginHorizontal: 4,
+    height: 52,
+    backgroundColor: "rgba(37, 99, 235, 0.12)",
+    borderRadius: 14,
+    marginHorizontal: 2,
     borderWidth: 1,
-    borderColor: "rgba(37, 99, 235, 0.35)",
+    borderColor: "rgba(37, 99, 235, 0.25)",
   },
   tabButton: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 3,
+    paddingVertical: 4,
     zIndex: 2,
   },
   iconContainer: {
@@ -198,7 +197,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   tabIcon: {
-    fontSize: 20,
+    fontSize: 19,
   },
   badgeContainer: {
     position: "absolute",
@@ -218,13 +217,14 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   tabLabel: {
-    fontSize: 11,
-    fontWeight: "500",
+    fontSize: 10.5,
+    fontWeight: "600",
     color: authColors.textMuted,
-    marginTop: 2,
+    marginTop: 3,
+    textAlign: "center",
   },
   tabLabelActive: {
     color: authColors.roleAccent,
-    fontWeight: "700",
+    fontWeight: "800",
   },
 });

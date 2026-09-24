@@ -362,9 +362,9 @@ export default function DashboardScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.quickLinkBtn}
-                onPress={() => navigation.navigate("Expenses")}
+                onPress={() => navigation.navigate("Settings")}
               >
-                <Text style={styles.quickLinkText}>📈 Reports & Analytics</Text>
+                <Text style={styles.quickLinkText}>📋 Dispatchers & Org</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -605,14 +605,15 @@ const styles = StyleSheet.create({
   gridContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12,
+    gap: 10,
     marginBottom: 20,
   },
   gridCard: {
-    width: (SCREEN_WIDTH - 44) / 2,
+    flex: 1,
+    minWidth: "46%",
     backgroundColor: authColors.cardBg,
     borderRadius: 16,
-    padding: 16,
+    padding: 14,
     borderWidth: 1,
     borderColor: authColors.cardBorder,
   },
@@ -881,10 +882,11 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   adminCard: {
-    width: (SCREEN_WIDTH - 42) / 2,
+    flex: 1,
+    minWidth: "46%",
     backgroundColor: authColors.cardBg,
     borderRadius: 14,
-    padding: 14,
+    padding: 12,
     borderWidth: 1,
     borderColor: authColors.cardBorder,
   },

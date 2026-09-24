@@ -2,6 +2,12 @@ const mongoose = require('mongoose');
 
 const MaintenanceSchema = new mongoose.Schema(
   {
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: [true, 'Organization ID is required'],
+      index: true,
+    },
     vehicleID: {
       type: String,
       required: true,
@@ -43,5 +49,8 @@ const MaintenanceSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+MaintenanceSchema.index({ organizationId: 1, vehicleID: 1 });
+MaintenanceSchema.index({ organizationId: 1, status: 1 });
 
 module.exports = mongoose.model('Maintenance', MaintenanceSchema);

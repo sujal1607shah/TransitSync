@@ -123,8 +123,28 @@ const useChatStore = create<ChatState>((set, get) => ({
       const res = await axios.post(ChatDirectConversationUrl, { userId });
       const conv = res.data?.data;
       if (!conv) return null;
-      
-      return conv.conversationId;
+
+      const conversationId = conv.conversationId;
+      const contactId = String(userId);
+
+      set((state) => {
+        const existing = state.conversations[contactId];
+        return {
+          conversations: {
+            ...state.conversations,
+            [contactId]: {
+              contactId,
+              conversationId,
+              messages: existing ? existing.messages : [],
+              unreadCount: existing ? existing.unreadCount : 0,
+              lastMessage: conv.lastMessage || existing?.lastMessage,
+              lastMessageAt: conv.lastMessageAt ? new Date(conv.lastMessageAt).getTime() : Date.now(),
+            },
+          },
+        };
+      });
+
+      return conversationId;
     } catch (error) {
       console.error("Failed to get/create conversation", error);
       return null;

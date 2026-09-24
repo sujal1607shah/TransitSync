@@ -1,6 +1,11 @@
 // Base API URL pointing to Node.js Express server
 export const BASE_URL = "http://192.168.1.2:5000";
 
+// Organization Onboarding & Management APIs
+export const OrganizationRegisterUrl = `${BASE_URL}/api/organizations/register`;
+export const OrganizationMeUrl = `${BASE_URL}/api/organizations/me`;
+export const OrganizationsUrl = `${BASE_URL}/api/organizations`;
+
 // Auth APIs
 export const Login = `${BASE_URL}/api/auth/login`;
 export const requestemail = `${BASE_URL}/api/auth/request-reset-password`;
@@ -23,6 +28,7 @@ export const CancelTrip = `${BASE_URL}/api/trip/cancel`;
 
 // Driver & User APIs
 export const GetDrivers = `${BASE_URL}/api/user`;
+export const DeleteDriver = `${BASE_URL}/api/user`;
 
 // Attendance & Geofencing APIs
 export const CheckInUrl = `${BASE_URL}/api/attendance/check-in`;
@@ -45,6 +51,7 @@ export const FleetAnalyticsUrl = `${BASE_URL}/api/analytics/fleet`;
 // AI Assistant & Communication APIs
 export const AIChatUrl = `${BASE_URL}/api/ai/chat`;
 export const ChatConversationsUrl = `${BASE_URL}/api/chat/conversations`;
+export const ChatUsersUrl = `${BASE_URL}/api/chat/users`;
 export const ChatDirectConversationUrl = `${BASE_URL}/api/chat/conversations/direct`;
 export const ChatMessagesUrl = `${BASE_URL}/api/chat/messages`;
 

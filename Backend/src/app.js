@@ -8,6 +8,7 @@ const errorHandler = require('./middleware/error.middleware');
 
 // Import Route Modules
 const authRoutes = require('./routes/auth.routes');
+const organizationRoutes = require('./routes/organization.routes');
 const userRoutes = require('./routes/user.routes');
 const driverRoutes = require('./routes/driver.routes');
 const vehicleRoutes = require('./routes/vehicle.routes');
@@ -35,7 +36,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Rate Limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 mins
-  max: 300, // Limit each IP to 300 requests per window
+  max: 1000, // Limit each IP to 1000 requests per window
 });
 app.use('/api/', limiter);
 
@@ -46,7 +47,7 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.get('/api/health', (req, res) => {
   res.status(200).json({
     success: true,
-    message: 'TransitSync Backend API is running',
+    message: 'TransitSync Backend API is running with Multi-Tenant Architecture',
     timestamp: new Date(),
     database: 'connected',
   });
@@ -54,7 +55,9 @@ app.get('/api/health', (req, res) => {
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/organizations', organizationRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/users', userRoutes);
 app.use('/api/drivers', driverRoutes);
 app.use('/api/vehicle', vehicleRoutes);
 app.use('/api/vehicles', vehicleRoutes);

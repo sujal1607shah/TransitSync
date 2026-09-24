@@ -8,6 +8,7 @@ import Loader from "../components/Loader";
 // Import Screens
 import LoginScreen from "../screens/LoginScreen";
 import SignupScreen from "../screens/SignupScreen";
+import OrganizationRegisterScreen from "../screens/OrganizationRegisterScreen";
 import DashboardScreen from "../screens/DashboardScreen";
 import AttendanceScreen from "../screens/AttendanceScreen";
 import VehicleRegistryScreen from "../screens/VehicleRegistryScreen";
@@ -56,6 +57,7 @@ export default function AppNavigator() {
           <Stack.Group>
             <Stack.Screen name="Login" component={LoginScreen} options={{ animation: "fade" }} />
             <Stack.Screen name="Signup" component={SignupScreen} options={{ animation: "slide_from_right" }} />
+            <Stack.Screen name="RegisterOrg" component={OrganizationRegisterScreen} options={{ animation: "slide_from_right" }} />
           </Stack.Group>
         ) : (
           // Logged In Screens

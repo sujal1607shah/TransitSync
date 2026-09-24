@@ -2,16 +2,20 @@ const mongoose = require('mongoose');
 
 const ConversationSchema = new mongoose.Schema(
   {
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: [true, 'Organization ID is required'],
+      index: true,
+    },
     conversationId: {
       type: String,
       required: true,
-      unique: true,
       index: true,
     },
     participantKey: {
       type: String,
-      unique: true,
-      sparse: true, // Only for direct chats
+      sparse: true, // Unique per org
       index: true,
     },
     type: {
@@ -45,5 +49,9 @@ const ConversationSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+ConversationSchema.index({ organizationId: 1, conversationId: 1 }, { unique: true });
+ConversationSchema.index({ organizationId: 1, participantKey: 1 }, { unique: true, sparse: true });
+ConversationSchema.index({ organizationId: 1, participants: 1 });
 
 module.exports = mongoose.model('Conversation', ConversationSchema);

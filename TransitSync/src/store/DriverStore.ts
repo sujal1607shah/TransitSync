@@ -10,8 +10,8 @@ interface DriverState {
   error: string | null;
   fetchDrivers: () => Promise<{ success: boolean; data?: any; message?: string }>;
   getDrivers: () => Promise<{ success: boolean; data?: any; message?: string }>;
-  clearDriver: () => void;
   createDriver: (payload: any) => Promise<{ success: boolean; data?: any; message?: string }>;
+  deleteDriver: (id: string) => Promise<{ success: boolean; data?: any; message?: string }>;
 }
 
 const useDriverStore = create<DriverState>((set, get) => ({
@@ -64,6 +64,20 @@ const useDriverStore = create<DriverState>((set, get) => ({
       }
     } catch (error: any) {
       const errMsg = error.response?.data?.message || "Failed to create driver";
+      set({ loading: false, error: errMsg });
+      return { success: false, message: errMsg };
+    }
+  },
+
+  deleteDriver: async (id: string) => {
+    try {
+      set({ loading: true, error: null });
+      const response = await axios.delete(`${GetDrivers}/${id}`);
+      set({ loading: false });
+      get().fetchDrivers(); // refresh list
+      return { success: true, data: response.data };
+    } catch (error: any) {
+      const errMsg = error.response?.data?.message || "Failed to delete driver";
       set({ loading: false, error: errMsg });
       return { success: false, message: errMsg };
     }

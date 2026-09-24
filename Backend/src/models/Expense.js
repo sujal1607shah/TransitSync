@@ -2,6 +2,12 @@ const mongoose = require('mongoose');
 
 const ExpenseSchema = new mongoose.Schema(
   {
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: [true, 'Organization ID is required'],
+      index: true,
+    },
     vehicleID: {
       type: String,
       default: '',
@@ -42,5 +48,8 @@ const ExpenseSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+ExpenseSchema.index({ organizationId: 1, date: -1 });
+ExpenseSchema.index({ organizationId: 1, category: 1 });
 
 module.exports = mongoose.model('Expense', ExpenseSchema);

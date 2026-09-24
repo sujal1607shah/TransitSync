@@ -22,18 +22,10 @@ export default function SignupScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phoneNo, setPhoneNo] = useState("");
-  const [licenseNo, setLicenseNo] = useState("");
-  const [licenseExpiry, setLicenseExpiry] = useState(""); // MM/YYYY format
-  const [selectedRole, setSelectedRole] = useState("ROLE_DRIVER");
+  const selectedRole = "ROLE_ADMIN";
 
   const { signup, loading, error } = useAuthStore();
   const navigation = useNavigation<any>();
-
-  const roles = [
-    { label: "Driver", value: "ROLE_DRIVER", icon: "🚚" },
-    { label: "Dispatcher", value: "ROLE_DISPATCHER", icon: "📋" },
-    { label: "Admin", value: "ROLE_ADMIN", icon: "🛡️" },
-  ];
 
   const handleSignup = async () => {
     if (!name || !email || !password || !phoneNo) {
@@ -41,40 +33,17 @@ export default function SignupScreen() {
       return;
     }
 
-    if (selectedRole === "ROLE_DRIVER" && (!licenseNo || !licenseExpiry)) {
-      Alert.alert("Error", "Please enter license details for Driver registration");
-      return;
-    }
-
-    let licenseExpiryDate = "";
-    if (selectedRole === "ROLE_DRIVER") {
-      const parts = licenseExpiry.split("/");
-      if (parts.length !== 2 || parts[0].length !== 2 || parts[1].length !== 4) {
-        Alert.alert("Error", "Invalid Expiry date. Please use MM/YYYY format.");
-        return;
-      }
-      const mm = Number(parts[0]);
-      const yyyy = Number(parts[1]);
-      if (mm < 1 || mm > 12) {
-        Alert.alert("Error", "Month must be between 01 and 12");
-        return;
-      }
-      licenseExpiryDate = new Date(yyyy, mm - 1, 1).toISOString();
-    }
-
     const payload = {
       name: name.trim(),
       email: email.trim(),
       password,
       phoneNo: phoneNo.trim(),
-      licenseNo: selectedRole === "ROLE_DRIVER" ? licenseNo.trim() : undefined,
-      licenseExpiryDate: selectedRole === "ROLE_DRIVER" ? licenseExpiryDate : undefined,
       role: selectedRole,
     };
 
     const result = await signup(payload);
     if (result.success) {
-      Alert.alert("Success", "Account created successfully", [
+      Alert.alert("Success", "Admin account created successfully", [
         { text: "OK", onPress: () => navigation.replace("Dashboard") },
       ]);
     } else {
@@ -146,62 +115,20 @@ export default function SignupScreen() {
               onChangeText={setPhoneNo}
             />
 
-            {/* Role selection dropdown */}
-            <Text style={styles.label}>Select Role *</Text>
-            <View style={styles.rolePickerContainer}>
-              {roles.map((role) => {
-                const isSelected = selectedRole === role.value;
-                return (
-                  <TouchableOpacity
-                    key={role.value}
-                    style={[
-                      styles.roleButton,
-                      isSelected && styles.roleButtonActive,
-                    ]}
-                    onPress={() => setSelectedRole(role.value)}
-                  >
-                    <Text
-                      style={[
-                        styles.roleButtonText,
-                        isSelected && styles.roleButtonTextActive,
-                      ]}
-                    >
-                      {role.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {/* Conditionally show License Details if Driver is selected */}
-            {selectedRole === "ROLE_DRIVER" && (
-              <View style={styles.driverSection}>
-                <Text style={styles.label}>Driver License Number *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="DL-XXXXXXXXXXXX"
-                  placeholderTextColor={authColors.textMuted}
-                  autoCapitalize="characters"
-                  value={licenseNo}
-                  onChangeText={setLicenseNo}
-                />
-
-                <Text style={styles.label}>License Expiry (MM/YYYY) *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="12/2030"
-                  placeholderTextColor={authColors.textMuted}
-                  keyboardType="numeric"
-                  value={licenseExpiry}
-                  onChangeText={setLicenseExpiry}
-                />
+            {/* Role indicator badge */}
+            <Text style={styles.label}>Account Role</Text>
+            <View style={styles.adminRoleBadge}>
+              <Text style={styles.adminRoleIcon}>🛡️</Text>
+              <View>
+                <Text style={styles.adminRoleTitle}>Organization Administrator</Text>
+                <Text style={styles.adminRoleSub}>Full management of dispatchers, drivers, and fleet operations</Text>
               </View>
-            )}
+            </View>
 
             {error && <Text style={styles.errorText}>{error}</Text>}
 
             <TouchableOpacity style={styles.submitButton} onPress={handleSignup}>
-              <Text style={styles.submitButtonText}>Register Profile</Text>
+              <Text style={styles.submitButtonText}>Create Administrator Account</Text>
             </TouchableOpacity>
 
             <View style={styles.loginContainer}>
@@ -282,38 +209,30 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 14,
   },
-  rolePickerContainer: {
+  adminRoleBadge: {
     flexDirection: "row",
-    gap: 8,
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: authColors.roleActiveBg,
+    borderWidth: 1,
+    borderColor: authColors.roleAccent,
     marginBottom: 16,
   },
-  roleButton: {
-    flex: 1,
-    alignItems: "center",
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: authColors.cardBorder,
-    backgroundColor: authColors.inputBg,
+  adminRoleIcon: {
+    fontSize: 24,
   },
-  roleButtonActive: {
-    borderColor: authColors.roleAccent,
-    backgroundColor: authColors.roleActiveBg,
+  adminRoleTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: authColors.textPrimary,
   },
-  roleButtonText: {
-    fontSize: 13,
-    color: authColors.textSecondary,
-    fontWeight: "500",
-  },
-  roleButtonTextActive: {
-    color: authColors.roleAccent,
-    fontWeight: "600",
-  },
-  driverSection: {
-    marginTop: 6,
-    borderTopWidth: 1,
-    borderTopColor: authColors.cardBorder,
-    paddingTop: 14,
+  adminRoleSub: {
+    fontSize: 11,
+    color: authColors.textMuted,
+    marginTop: 2,
+    paddingRight: 16,
   },
   errorText: {
     color: authColors.error,

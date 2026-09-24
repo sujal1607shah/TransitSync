@@ -466,10 +466,11 @@ const styles = StyleSheet.create({
     borderTopColor: authColors.divider,
     paddingTop: 12,
     marginBottom: 16,
-    gap: 12,
+    gap: 8,
   },
   gridCell: {
-    width: "45%",
+    flex: 1,
+    minWidth: "45%",
   },
   cellLabel: {
     fontSize: 10,
@@ -479,8 +480,8 @@ const styles = StyleSheet.create({
   },
   cellVal: {
     fontSize: 13,
-    fontWeight: "600",
-    color: authColors.textSecondary,
+    fontWeight: "700",
+    color: authColors.textPrimary,
   },
   cardActions: {
     flexDirection: "row",

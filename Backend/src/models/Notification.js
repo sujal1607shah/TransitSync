@@ -2,6 +2,12 @@ const mongoose = require('mongoose');
 
 const NotificationSchema = new mongoose.Schema(
   {
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: [true, 'Organization ID is required'],
+      index: true,
+    },
     recipient: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -43,5 +49,7 @@ const NotificationSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+NotificationSchema.index({ organizationId: 1, recipient: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Notification', NotificationSchema);

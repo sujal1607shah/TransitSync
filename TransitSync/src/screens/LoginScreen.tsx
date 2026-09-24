@@ -126,10 +126,19 @@ export default function LoginScreen() {
               <Text style={styles.submitButtonText}>Authorize Login</Text>
             </TouchableOpacity>
 
-            <View style={styles.signupContainer}>
-              <Text style={styles.signupText}>Don't have an account? </Text>
-              <TouchableOpacity onPress={() => navigation.navigate("Signup")}>
-                <Text style={styles.signupLink}>Sign Up</Text>
+            <View style={styles.linksContainer}>
+              <View style={styles.signupContainer}>
+                <Text style={styles.signupText}>Don't have an account? </Text>
+                <TouchableOpacity onPress={() => navigation.navigate("Signup")}>
+                  <Text style={styles.signupLink}>Sign Up</Text>
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                style={styles.createOrgBtn}
+                onPress={() => navigation.navigate("RegisterOrg")}
+              >
+                <Text style={styles.createOrgText}>🏢 Register New Organization</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -154,7 +163,7 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     alignItems: "center",
-    marginBottom: 36,
+    marginBottom: 28,
   },
   logoImage: {
     width: 72,
@@ -193,7 +202,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "700",
     color: authColors.textPrimary,
-    marginBottom: 24,
+    marginBottom: 20,
     textAlign: "center",
   },
   label: {
@@ -251,25 +260,43 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
-    marginTop: 8,
+    marginTop: 4,
   },
   submitButtonText: {
-    color: "#1a1200",
-    fontSize: 15,
-    fontWeight: "700",
+    color: "#0F172A",
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  linksContainer: {
+    marginTop: 20,
+    alignItems: "center",
+    gap: 12,
   },
   signupContainer: {
     flexDirection: "row",
-    justifyContent: "center",
-    marginTop: 20,
+    alignItems: "center",
   },
   signupText: {
-    color: authColors.textSecondary,
+    color: authColors.textMuted,
     fontSize: 13,
   },
   signupLink: {
     color: authColors.roleAccent,
-    fontWeight: "600",
     fontSize: 13,
+    fontWeight: "700",
+  },
+  createOrgBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: "rgba(245, 158, 11, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.3)",
+  },
+  createOrgText: {
+    color: authColors.roleAccent,
+    fontSize: 13,
+    fontWeight: "700",
   },
 });

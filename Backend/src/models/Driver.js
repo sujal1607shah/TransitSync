@@ -2,10 +2,15 @@ const mongoose = require('mongoose');
 
 const DriverSchema = new mongoose.Schema(
   {
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: [true, 'Organization ID is required'],
+      index: true,
+    },
     driverId: {
       type: String,
       required: true,
-      unique: true,
       index: true,
     },
     user: {
@@ -64,5 +69,9 @@ const DriverSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+DriverSchema.index({ organizationId: 1, driverId: 1 }, { unique: true });
+DriverSchema.index({ organizationId: 1, status: 1 });
+DriverSchema.index({ organizationId: 1, isAvailable: 1 });
 
 module.exports = mongoose.model('Driver', DriverSchema);

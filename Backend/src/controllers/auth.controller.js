@@ -1,6 +1,32 @@
 const User = require('../models/User');
+const Organization = require('../models/Organization');
 const generateToken = require('../utils/generateToken');
 const { successResponse, errorResponse } = require('../utils/response');
+
+// Helper to get or create demo organization
+const getOrCreateDemoOrg = async () => {
+  let demoOrg = await Organization.findOne({ code: 'TS-DEMO' });
+  if (!demoOrg) {
+    demoOrg = await Organization.create({
+      name: 'TransitSync Demo Organization',
+      code: 'TS-DEMO',
+      email: 'admin@transitsync.com',
+      phone: '+91 98765 00000',
+      address: 'Central Logistics Park',
+      city: 'Ahmedabad',
+      country: 'India',
+      timezone: 'Asia/Kolkata',
+      currency: 'INR (Rs)',
+      geofence: {
+        latitude: 23.0225,
+        longitude: 72.5714,
+        radiusMeters: 200,
+        name: 'Ahmedabad Central Depot',
+      },
+    });
+  }
+  return demoOrg;
+};
 
 // @desc    Login user & get token
 // @route   POST /api/auth/login
@@ -15,11 +41,13 @@ const login = async (req, res) => {
 
     // Demo account shortcut support for testing/college presentation
     if (email === 'test@transitsync.com' && password === 'password') {
+      const demoOrg = await getOrCreateDemoOrg();
       const mockRole = role || 'ROLE_DRIVER';
-      let user = await User.findOne({ email });
+      let user = await User.findOne({ email, organizationId: demoOrg._id });
 
       if (!user) {
         user = await User.create({
+          organizationId: demoOrg._id,
           name: mockRole === 'ROLE_ADMIN' ? 'Demo Admin' : mockRole === 'ROLE_DISPATCHER' ? 'Demo Dispatcher' : 'Demo Driver',
           email,
           password: 'password',
@@ -27,7 +55,7 @@ const login = async (req, res) => {
         });
       }
 
-      const token = generateToken(user._id, user.role);
+      const token = generateToken(user._id, user.role, demoOrg._id);
 
       return successResponse(res, 200, 'Login successful', {
         token,
@@ -35,10 +63,16 @@ const login = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        organizationId: demoOrg._id,
+        organization: {
+          id: demoOrg._id,
+          name: demoOrg.name,
+          code: demoOrg.code,
+        },
       });
     }
 
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+password').populate('organizationId');
 
     if (!user) {
       return errorResponse(res, 401, 'Invalid credentials');
@@ -50,7 +84,7 @@ const login = async (req, res) => {
     }
 
     // Enforce role consistency (prevent role escalation)
-    if (role && role !== user.role) {
+    if (role && role !== user.role && role.replace('ROLE_', '') !== user.role.replace('ROLE_', '')) {
       const prettyRole = user.role.replace('ROLE_', '');
       return errorResponse(res, 403, `Role mismatch: This account is registered as ${prettyRole}. Please select the correct role.`);
     }
@@ -59,7 +93,8 @@ const login = async (req, res) => {
     user.lastSeen = new Date();
     await user.save();
 
-    const token = generateToken(user._id, user.role);
+    const orgId = user.organizationId ? (user.organizationId._id || user.organizationId) : null;
+    const token = generateToken(user._id, user.role, orgId);
 
     return successResponse(res, 200, 'Login successful', {
       token,
@@ -67,6 +102,14 @@ const login = async (req, res) => {
       name: user.name,
       email: user.email,
       role: user.role,
+      organizationId: orgId,
+      organization: user.organizationId
+        ? {
+            id: user.organizationId._id,
+            name: user.organizationId.name,
+            code: user.organizationId.code,
+          }
+        : null,
     });
   } catch (error) {
     return errorResponse(res, 500, error.message);
@@ -78,7 +121,7 @@ const login = async (req, res) => {
 // @access  Private
 const getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
+    const user = await User.findById(req.user._id).populate('organizationId');
     return successResponse(res, 200, 'User profile retrieved', user);
   } catch (error) {
     return errorResponse(res, 500, error.message);
@@ -102,20 +145,31 @@ const requestResetPassword = async (req, res) => {
 // @access  Public
 const resetPassword = async (req, res) => {
   try {
-    return successResponse(res, 200, 'Password reset successful');
+    const { email, newPassword } = req.body;
+    if (!email || !newPassword) {
+      return errorResponse(res, 400, 'Email and new password required');
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    if (!user) {
+      return errorResponse(res, 404, 'User with this email not found');
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    return successResponse(res, 200, 'Password has been reset successfully');
   } catch (error) {
     return errorResponse(res, 500, error.message);
   }
 };
 
-// @desc    Logout User
+// @desc    Logout user
 // @route   POST /api/auth/logout
 // @access  Private
 const logout = async (req, res) => {
   try {
-    if (req.user) {
-      await User.findByIdAndUpdate(req.user._id, { isOnline: false, lastSeen: new Date() });
-    }
+    await User.findByIdAndUpdate(req.user._id, { isOnline: false, lastSeen: new Date() });
     return successResponse(res, 200, 'Logged out successfully');
   } catch (error) {
     return errorResponse(res, 500, error.message);

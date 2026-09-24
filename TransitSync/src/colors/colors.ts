@@ -90,4 +90,10 @@ export const authColors = {
 
   modalOverlay: "rgba(15, 23, 42, 0.40)",
   deleteText: "#EF4444",
+
+  // Compatibility aliases
+  border: "#E2E8F0",
+  background: "#F8FAFC",
+  headerBg: "#FFFFFF",
+  headerBorder: "#E2E8F0",
 };

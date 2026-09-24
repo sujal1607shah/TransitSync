@@ -17,29 +17,32 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
   return R * c; // Distance in meters
 }
 
-const GEOFENCE_CONFIG = {
+const DEFAULT_GEOFENCE_CONFIG = {
   latitude: 23.0225,
   longitude: 72.5714,
   radiusMeters: 200, // 200 meters allowed radius
 };
 
-function verifyGeofence(userLat, userLng) {
+function verifyGeofence(userLat, userLng, customGeofence) {
+  const config = customGeofence || DEFAULT_GEOFENCE_CONFIG;
+  const radius = config.radiusMeters || 200;
+
   const distance = getDistanceInMeters(
     userLat,
     userLng,
-    GEOFENCE_CONFIG.latitude,
-    GEOFENCE_CONFIG.longitude
+    config.latitude,
+    config.longitude
   );
 
   return {
-    isInside: distance <= GEOFENCE_CONFIG.radiusMeters,
+    isInside: distance <= radius,
     distanceMeters: Math.round(distance),
-    allowedRadius: GEOFENCE_CONFIG.radiusMeters,
+    allowedRadius: radius,
   };
 }
 
 module.exports = {
   getDistanceInMeters,
   verifyGeofence,
-  GEOFENCE_CONFIG,
+  DEFAULT_GEOFENCE_CONFIG,
 };

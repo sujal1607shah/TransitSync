@@ -3,6 +3,12 @@ const bcrypt = require('bcryptjs');
 
 const UserSchema = new mongoose.Schema(
   {
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: [true, 'Organization ID is required'],
+      index: true,
+    },
     name: {
       type: String,
       required: [true, 'Name is required'],
@@ -11,7 +17,6 @@ const UserSchema = new mongoose.Schema(
     email: {
       type: String,
       required: [true, 'Email is required'],
-      unique: true,
       lowercase: true,
       trim: true,
     },
@@ -55,6 +60,10 @@ const UserSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Compound Index: unique email per organization
+UserSchema.index({ organizationId: 1, email: 1 }, { unique: true });
+UserSchema.index({ organizationId: 1, role: 1 });
 
 // Encrypt password before save
 UserSchema.pre('save', async function (next) {

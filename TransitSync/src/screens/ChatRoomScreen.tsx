@@ -59,11 +59,16 @@ function roleLabel(role: string): string {
 }
 
 function formatTime(ts: number): string {
-  return new Date(ts).toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
+  if (!ts) return "";
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return "";
+  let hours = d.getHours();
+  const minutes = d.getMinutes();
+  const ampm = hours >= 12 ? "PM" : "AM";
+  hours = hours % 12;
+  hours = hours ? hours : 12; // '0' should be '12'
+  const minutesStr = minutes < 10 ? `0${minutes}` : String(minutes);
+  return `${hours}:${minutesStr} ${ampm}`;
 }
 
 // ─── Image lightbox ───────────────────────────────────────────────────────────
@@ -558,7 +563,7 @@ const styles = StyleSheet.create({
   },
   bubbleRowRight: { justifyContent: "flex-end" },
   bubbleRowLeft: { justifyContent: "flex-start" },
-  bubbleCol: { maxWidth: "72%", gap: 2 },
+  bubbleCol: { maxWidth: "78%", gap: 3 },
   bubble: { borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1 },
   bubbleMe: {
     backgroundColor: authColors.roleActiveBg,
@@ -571,11 +576,17 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 4,
   },
   bubbleText: { fontSize: 14, color: authColors.textPrimary, lineHeight: 20 },
-  bubbleMeta: { flexDirection: "row", alignItems: "center", gap: 4, marginLeft: 4 },
-  bubbleMetaRight: { justifyContent: "flex-end" },
-  bubbleTime: { fontSize: 10, color: authColors.textMuted },
-  tickMark: { fontSize: 11, color: authColors.textMuted },
-  tickRead: { color: authColors.logoRing },
+  bubbleMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 2,
+    marginTop: 1,
+  },
+  bubbleMetaRight: { justifyContent: "flex-end", alignSelf: "flex-end" },
+  bubbleTime: { fontSize: 11, color: authColors.textMuted, fontWeight: "500" },
+  tickMark: { fontSize: 12, color: authColors.textMuted, marginLeft: 2 },
+  tickRead: { color: authColors.logoRing, fontWeight: "700" },
   meAvatarSpacer: { width: 30 },
   miniAvatar: {
     width: 30, height: 30, borderRadius: 15,
