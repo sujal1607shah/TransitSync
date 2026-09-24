@@ -18,8 +18,8 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
 }
 
 const DEFAULT_GEOFENCE_CONFIG = {
-  latitude: 23.0225,
-  longitude: 72.5714,
+  latitude: 23.0677813,
+  longitude: 72.5519712,
   radiusMeters: 200, // 200 meters allowed radius
 };
 
