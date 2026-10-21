@@ -90,7 +90,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       set({ loading: true, error: null });
 
-      const response = await axios.post(Login, { email, password, role }, { timeout: 4000 });
+      const response = await axios.post(Login, { email, password, role }, { timeout: 10000 });
       const data = response.data;
 
       if (data.success || response.status === 200) {

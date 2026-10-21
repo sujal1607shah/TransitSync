@@ -32,13 +32,15 @@ export default function AppNavigator() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const userId = user?.id || user?._id;
+
   useEffect(() => {
-    if (token && user?.id) {
-      initSocket(token, user.id);
+    if (token && userId) {
+      initSocket(token, String(userId));
     } else {
       disconnectSocket();
     }
-  }, [token, user?.id]);
+  }, [token, userId]);
 
   if (!initialized) {
     return <Loader show={true} text="Initializing console..." />;

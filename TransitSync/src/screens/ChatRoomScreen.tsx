@@ -263,24 +263,26 @@ export default function ChatRoomScreen() {
       socketService.joinConversation(conv.conversationId);
       
       // Listen to typing events
-      socketService.on('typing:start', (data) => {
+      const onTypingStart = (data: any) => {
         if (data.conversationId === conv.conversationId && String(data.userId) === contact.id) {
           setIsTyping(true);
         }
-      });
+      };
 
-      socketService.on('typing:stop', (data) => {
+      const onTypingStop = (data: any) => {
         if (data.conversationId === conv.conversationId && String(data.userId) === contact.id) {
           setIsTyping(false);
         }
-      });
-    }
-    
-    return () => {
-      if (conv?.conversationId) {
+      };
+
+      socketService.on('typing:start', onTypingStart);
+      socketService.on('typing:stop', onTypingStop);
+
+      return () => {
         socketService.leaveConversation(conv.conversationId);
-        // We shouldn't necessarily remove ALL listeners here, but if we do, it cleans up
-      }
+        socketService.off('typing:start', onTypingStart);
+        socketService.off('typing:stop', onTypingStop);
+      };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conv?.conversationId, contact.id]);

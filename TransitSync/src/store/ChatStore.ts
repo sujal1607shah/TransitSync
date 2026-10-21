@@ -64,6 +64,7 @@ const useChatStore = create<ChatState>((set, get) => ({
 
   initSocket: (token: string, userId: string) => {
     socketService.connect(token);
+    socketService.off('message:new');
     socketService.on('message:new', (msg) => {
       get().handleNewMessage(msg, userId);
     });
@@ -156,15 +157,23 @@ const useChatStore = create<ChatState>((set, get) => ({
       const res = await axios.get(`${ChatConversationsUrl}/${conversationId}/messages`);
       const msgs = res.data?.data || res.data?.serviceResult || [];
       
-      const parsedMsgs: ChatMessage[] = msgs.map((m: any) => ({
-        id: m.messageId,
-        text: m.content,
-        senderId: String(m.senderId),
-        timestamp: new Date(m.createdAt || m.timestamp || Date.now()).getTime(),
-        read: m.read,
-        mediaUri: m.mediaUri,
-        mediaType: m.mediaType,
-      }));
+      const seenIds = new Set<string>();
+      const parsedMsgs: ChatMessage[] = [];
+      for (const m of msgs) {
+        const id = m.messageId || m._id || m.id;
+        if (!seenIds.has(id)) {
+          seenIds.add(id);
+          parsedMsgs.push({
+            id,
+            text: m.content || m.text || '',
+            senderId: String(m.senderId),
+            timestamp: new Date(m.createdAt || m.timestamp || Date.now()).getTime(),
+            read: m.read,
+            mediaUri: m.mediaUri,
+            mediaType: m.mediaType,
+          });
+        }
+      }
 
       set((state) => {
         const prev = state.conversations[contactId];
@@ -207,17 +216,13 @@ const useChatStore = create<ChatState>((set, get) => ({
         mediaType
       });
 
-      // Optimistically we could add it, but since we have sockets, 
-      // the socket handleNewMessage will actually push it to the state cleanly 
-      // if we are the sender as well, or we can push optimistically.
-      // We will push optimistically for better UX.
-
+      // Optimistically add to local state
       const createdMsg = res.data?.data;
       if (!createdMsg) return;
 
       const userMsg: ChatMessage = {
-        id: createdMsg.messageId,
-        text: createdMsg.content,
+        id: createdMsg.messageId || createdMsg.id || `msg_${Date.now()}`,
+        text: createdMsg.content || text,
         senderId: createdMsg.senderId,
         timestamp: new Date(createdMsg.createdAt || createdMsg.timestamp || Date.now()).getTime(),
         read: true,
@@ -228,6 +233,12 @@ const useChatStore = create<ChatState>((set, get) => ({
       set((s) => {
         const prev = s.conversations[contactId];
         if (!prev) return s;
+
+        // Deduplication check: do not add if message with this ID already exists
+        if (prev.messages.some((m) => m.id === userMsg.id)) {
+          return s;
+        }
+
         return {
           conversations: {
             ...s.conversations,
@@ -246,14 +257,18 @@ const useChatStore = create<ChatState>((set, get) => ({
   },
 
   handleNewMessage: (msg: any, currentUserId: string) => {
-    const isMe = String(msg.senderId) === currentUserId;
-    if (isMe) return; // Handled optimistically in sendMessage
+    if (!msg) return;
 
+    // Sender shouldn't process their own message via socket (handled optimistically)
+    const isMe = String(msg.senderId) === String(currentUserId);
+    if (isMe) return;
+
+    const messageId = msg.messageId || msg.id || msg._id;
     const contactId = String(msg.senderId);
 
     const newMsg: ChatMessage = {
-      id: msg.messageId,
-      text: msg.content,
+      id: messageId,
+      text: msg.content || msg.text || '',
       senderId: contactId,
       timestamp: new Date(msg.createdAt || msg.timestamp || Date.now()).getTime(),
       read: false,
@@ -262,18 +277,44 @@ const useChatStore = create<ChatState>((set, get) => ({
     };
 
     set((state) => {
-      const prev = state.conversations[contactId];
+      // Find matching conversation: first by contactId, fallback by conversationId
+      let targetContactId = contactId;
+      let prev = state.conversations[targetContactId];
+
+      if (!prev && msg.conversationId) {
+        const found = Object.values(state.conversations).find(
+          (c) => c.conversationId === msg.conversationId
+        );
+        if (found) {
+          targetContactId = found.contactId;
+          prev = found;
+        }
+      }
+
       if (!prev) {
-        // If we don't have the conversation loaded, we should ideally reload contacts
-        // For now, we can just trigger a load
+        // If we don't have the conversation loaded yet, reload conversations
         setTimeout(() => get().loadConversations(currentUserId), 100);
+        return state;
+      }
+
+      // CRITICAL DEDUPLICATION:
+      // Prevent duplicate messages if messageId matches OR if sender + content + timestamp are identical
+      const alreadyExists = prev.messages.some(
+        (m) =>
+          (m.id && newMsg.id && m.id === newMsg.id) ||
+          (m.senderId === newMsg.senderId &&
+            m.text === newMsg.text &&
+            Math.abs(m.timestamp - newMsg.timestamp) < 2000)
+      );
+
+      if (alreadyExists) {
         return state;
       }
 
       return {
         conversations: {
           ...state.conversations,
-          [contactId]: {
+          [targetContactId]: {
             ...prev,
             messages: [...prev.messages, newMsg],
             unreadCount: prev.unreadCount + 1,

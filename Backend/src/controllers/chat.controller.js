@@ -201,13 +201,14 @@ const sendMessage = async (req, res) => {
 
     await conv.save();
 
-    // Socket broadcast scoped to conversation room
+    // Socket broadcast scoped to conversation room and recipient user room
     const io = req.app.get('io');
     if (io) {
-      io.to(`conversation:${conversationId}`).emit('message:new', message);
+      let broadcast = io.to(`conversation:${conversationId}`);
       if (receiverId) {
-        io.to(`user:${receiverId}`).emit('message:new', message);
+        broadcast = broadcast.to(`user:${receiverId}`);
       }
+      broadcast.emit('message:new', message);
     }
 
     return successResponse(res, 201, 'Message sent', message);

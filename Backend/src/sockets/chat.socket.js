@@ -57,10 +57,11 @@ module.exports = (io, socket) => {
     const receiverId = messageData.receiverId;
 
     if (room) {
-      socket.to(`conversation:${room}`).emit('message:new', messageData);
+      let target = socket.to(`conversation:${room}`);
       if (receiverId) {
-        socket.to(`user:${receiverId}`).emit('message:new', messageData);
+        target = target.to(`user:${receiverId}`);
       }
+      target.emit('message:new', messageData);
     }
   });
 };

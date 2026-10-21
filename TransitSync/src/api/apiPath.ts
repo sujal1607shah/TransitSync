@@ -1,5 +1,5 @@
 // Base API URL pointing to Node.js Express server
-export const BASE_URL = "http://192.168.1.2:5000";
+export const BASE_URL = "http://10.22.153.194:5000";
 
 // Organization Onboarding & Management APIs
 export const OrganizationRegisterUrl = `${BASE_URL}/api/organizations/register`;

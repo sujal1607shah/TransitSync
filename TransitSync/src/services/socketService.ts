@@ -26,9 +26,12 @@ class SocketService {
 
     this.socket.on('connect', () => {
       console.log('[Socket] Connected as', this.socket?.id);
-      // Re-apply listeners
+      // Re-apply listeners safely without duplicating
       this.listeners.forEach((callbacks, event) => {
-        callbacks.forEach(cb => this.socket?.on(event, cb as any));
+        callbacks.forEach(cb => {
+          this.socket?.off(event, cb as any);
+          this.socket?.on(event, cb as any);
+        });
       });
     });
 
@@ -54,20 +57,37 @@ class SocketService {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, []);
     }
-    this.listeners.get(event)?.push(callback);
+    const currentList = this.listeners.get(event)!;
+    if (!currentList.includes(callback)) {
+      currentList.push(callback);
+    }
     
     if (this.socket) {
-      this.socket.on(event, callback);
+      this.socket.off(event, callback as any);
+      this.socket.on(event, callback as any);
     }
   }
 
-  off(event: string, callback: (...args: any[]) => void) {
+  off(event: string, callback?: (...args: any[]) => void) {
+    if (!callback) {
+      this.listeners.delete(event);
+      if (this.socket) {
+        this.socket.off(event);
+      }
+      return;
+    }
+
     const callbacks = this.listeners.get(event);
     if (callbacks) {
-      this.listeners.set(event, callbacks.filter(cb => cb !== callback));
+      const remaining = callbacks.filter(cb => cb !== callback);
+      if (remaining.length > 0) {
+        this.listeners.set(event, remaining);
+      } else {
+        this.listeners.delete(event);
+      }
     }
     if (this.socket) {
-      this.socket.off(event, callback);
+      this.socket.off(event, callback as any);
     }
   }
 
