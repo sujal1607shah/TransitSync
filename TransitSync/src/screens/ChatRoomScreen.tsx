@@ -26,6 +26,8 @@ import { authColors } from "../colors/colors";
 import useAuthStore from "../store/AuthStore";
 import useChatStore, { Contact, ChatMessage } from "../store/ChatStore";
 import { socketService } from "../services/socketService";
+import { requestCameraPermission } from "../utils/permissions";
+import { BASE_URL } from "../api/apiPath";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const IMAGE_BUBBLE_W = SCREEN_W * 0.6;
@@ -71,12 +73,27 @@ function formatTime(ts: number): string {
   return `${hours}:${minutesStr} ${ampm}`;
 }
 
+export function resolveMediaUri(uri?: string): string {
+  if (!uri) return "";
+  if (
+    uri.startsWith("http://") ||
+    uri.startsWith("https://") ||
+    uri.startsWith("data:") ||
+    uri.startsWith("file://") ||
+    uri.startsWith("content://")
+  ) {
+    return uri;
+  }
+  return `${BASE_URL}${uri.startsWith("/") ? "" : "/"}${uri}`;
+}
+
 // ─── Image lightbox ───────────────────────────────────────────────────────────
 function ImageLightbox({ uri, onClose }: { uri: string; onClose: () => void }) {
+  const fullUri = resolveMediaUri(uri);
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <TouchableOpacity style={styles.lightboxOverlay} activeOpacity={1} onPress={onClose}>
-        <Image source={{ uri }} style={styles.lightboxImage} resizeMode="contain" />
+        <Image source={{ uri: fullUri }} style={styles.lightboxImage} resizeMode="contain" />
         <TouchableOpacity style={styles.lightboxClose} onPress={onClose}>
           <Text style={styles.lightboxCloseText}>✕</Text>
         </TouchableOpacity>
@@ -155,12 +172,12 @@ function MessageBubble({ message, contact, isMe, onImagePress }: BubbleProps) {
         {/* Image attachment */}
         {hasImage && (
           <TouchableOpacity
-            onPress={() => onImagePress(message.mediaUri!)}
+            onPress={() => onImagePress(resolveMediaUri(message.mediaUri!))}
             activeOpacity={0.9}
             style={[styles.imageBubble, isMe ? styles.imageBubbleMe : styles.imageBubbleThem]}
           >
             <Image
-              source={{ uri: message.mediaUri }}
+              source={{ uri: resolveMediaUri(message.mediaUri) }}
               style={styles.bubbleImage}
               resizeMode="cover"
             />
@@ -244,13 +261,14 @@ export default function ChatRoomScreen() {
   const contact: Contact = route.params?.contact;
 
   const { user } = useAuthStore();
-  const { fetchMessages, getMessages, sendMessage, markRead, conversations } = useChatStore();
+  const { fetchMessages, getMessages, sendMessage, uploadMedia, markRead, conversations } = useChatStore();
 
   const [inputText, setInputText] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [mediaMenuVisible, setMediaMenuVisible] = useState(false);
   const [lightboxUri, setLightboxUri] = useState<string | null>(null);
   const [pendingMedia, setPendingMedia] = useState<Asset | null>(null);
+  const [isSending, setIsSending] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -313,22 +331,56 @@ export default function ChatRoomScreen() {
   // ─── Media picker ──────────────────────────────────────────────────────────
   const handlePickerResponse = useCallback((res: ImagePickerResponse) => {
     setMediaMenuVisible(false);
-    if (res.didCancel || res.errorCode) return;
+    if (res.didCancel) return;
+    if (res.errorCode) {
+      if (res.errorCode === "camera_unavailable") {
+        Alert.alert("Camera Unavailable", "Camera hardware is not available on this device.");
+      } else if (res.errorCode === "permission") {
+        Alert.alert("Permission Required", "Camera permission was not granted. Please enable it in device Settings.");
+      } else {
+        Alert.alert("Error", res.errorMessage || "Failed to capture media.");
+      }
+      return;
+    }
     const asset = res.assets?.[0];
     if (!asset) return;
     setPendingMedia(asset);
   }, []);
 
-  const openCamera = useCallback(() => {
+  const openCamera = useCallback(async () => {
+    setMediaMenuVisible(false);
+    const hasPermission = await requestCameraPermission();
+    if (!hasPermission) {
+      Alert.alert(
+        "Camera Permission Needed 📷",
+        "TransitSync requires camera permission so you can take and share photos in chat.",
+        [{ text: "OK" }]
+      );
+      return;
+    }
+
     launchCamera(
-      { mediaType: "mixed", quality: 0.8, saveToPhotos: false },
+      {
+        mediaType: "photo",
+        quality: 0.7,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        saveToPhotos: false,
+      },
       handlePickerResponse
     );
   }, [handlePickerResponse]);
 
   const openGallery = useCallback(() => {
+    setMediaMenuVisible(false);
     launchImageLibrary(
-      { mediaType: "mixed", quality: 0.8, selectionLimit: 1 },
+      {
+        mediaType: "photo",
+        quality: 0.7,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        selectionLimit: 1,
+      },
       handlePickerResponse
     );
   }, [handlePickerResponse]);
@@ -336,13 +388,45 @@ export default function ChatRoomScreen() {
   const removePendingMedia = useCallback(() => setPendingMedia(null), []);
 
   // ─── Send ──────────────────────────────────────────────────────────────────
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback(async () => {
     const text = inputText.trim();
     if (!text && !pendingMedia) return;
+    if (isSending) return;
 
-    const mediaUri = pendingMedia?.uri;
+    setIsSending(true);
+
+    let mediaUri = pendingMedia?.uri;
     const isVideo = pendingMedia?.type?.startsWith("video");
     const mediaType = isVideo ? "video" : pendingMedia ? "image" : undefined;
+
+    // Upload to server if attachment exists
+    if (pendingMedia?.uri) {
+      try {
+        const uploadedUrl = await uploadMedia(
+          pendingMedia.uri,
+          pendingMedia.fileName || `chat_${Date.now()}.jpg`,
+          pendingMedia.type || "image/jpeg"
+        );
+        if (uploadedUrl) {
+          mediaUri = uploadedUrl;
+        } else {
+          setIsSending(false);
+          Alert.alert(
+            "Upload Notice",
+            "Could not upload image to server. Please verify the backend server is reachable at " + BASE_URL
+          );
+          return;
+        }
+      } catch (uploadErr: any) {
+        setIsSending(false);
+        console.error("Upload failed:", uploadErr);
+        Alert.alert(
+          "Upload Failed",
+          uploadErr?.message || "Could not upload image to server."
+        );
+        return;
+      }
+    }
 
     sendMessage(
       contact.id,
@@ -359,7 +443,8 @@ export default function ChatRoomScreen() {
 
     setInputText("");
     setPendingMedia(null);
-  }, [inputText, pendingMedia, contact.id, user?.name, sendMessage, conv?.conversationId]);
+    setIsSending(false);
+  }, [inputText, pendingMedia, isSending, contact.id, user?.name, sendMessage, uploadMedia, conv?.conversationId]);
 
   // ─── Render ────────────────────────────────────────────────────────────────
   const renderItem = useCallback(
@@ -474,6 +559,15 @@ export default function ChatRoomScreen() {
             <Text style={styles.attachIcon}>📎</Text>
           </TouchableOpacity>
 
+          {/* Quick Camera button */}
+          <TouchableOpacity
+            style={styles.attachBtn}
+            onPress={openCamera}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.attachIcon}>📷</Text>
+          </TouchableOpacity>
+
           <TextInput
             style={styles.textInput}
             value={inputText}
@@ -486,12 +580,16 @@ export default function ChatRoomScreen() {
           />
 
           <TouchableOpacity
-            style={[styles.sendBtn, !canSend && styles.sendBtnDisabled]}
+            style={[styles.sendBtn, (!canSend || isSending) && styles.sendBtnDisabled]}
             onPress={handleSend}
-            disabled={!canSend}
+            disabled={!canSend || isSending}
             activeOpacity={0.8}
           >
-            <Text style={styles.sendIcon}>➤</Text>
+            {isSending ? (
+              <ActivityIndicator size="small" color={authColors.darkText} />
+            ) : (
+              <Text style={styles.sendIcon}>➤</Text>
+            )}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>

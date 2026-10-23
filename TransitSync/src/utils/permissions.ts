@@ -33,3 +33,27 @@ export const requestStoragePermission = async () => {
   }
   return true;
 };
+
+export const requestCameraPermission = async () => {
+  if (Platform.OS === "android") {
+    try {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.CAMERA,
+        {
+          title: "Camera Permission Needed 📷",
+          message:
+            "TransitSync requires camera access so you can capture and send photos in chat.",
+          buttonNeutral: "Ask Later",
+          buttonNegative: "Cancel",
+          buttonPositive: "Allow Permission",
+        }
+      );
+      return granted === PermissionsAndroid.RESULTS.GRANTED;
+    } catch (err) {
+      console.warn("Camera permission request error:", err);
+      return false;
+    }
+  }
+  return true;
+};
+
