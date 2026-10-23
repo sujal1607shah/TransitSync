@@ -301,6 +301,22 @@ export default function DashboardScreen() {
                 <Text style={styles.driverEtaText}>ETA 11:15 AM</Text>
               </View>
             </TouchableOpacity>
+
+            {/* Dispatcher Quick Operations */}
+            <View style={[styles.quickLinksRow, { marginTop: 14 }]}>
+              <TouchableOpacity
+                style={styles.quickLinkBtn}
+                onPress={() => navigation.navigate("Dispatch")}
+              >
+                <Text style={styles.quickLinkText}>📋 Dispatch Console</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.quickLinkBtn}
+                onPress={() => navigation.navigate("Expenses")}
+              >
+                <Text style={styles.quickLinkText}>💰 Expense & Fuel PDF</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -362,13 +378,19 @@ export default function DashboardScreen() {
                 style={styles.quickLinkBtn}
                 onPress={() => navigation.navigate("Vehicles")}
               >
-                <Text style={styles.quickLinkText}>🚚 Fleet Management</Text>
+                <Text style={styles.quickLinkText}>🚚 Fleet</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.quickLinkBtn}
+                onPress={() => navigation.navigate("Expenses")}
+              >
+                <Text style={styles.quickLinkText}>💰 Expenses & PDF</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.quickLinkBtn}
                 onPress={() => navigation.navigate("Settings")}
               >
-                <Text style={styles.quickLinkText}>📋 Dispatchers & Org</Text>
+                <Text style={styles.quickLinkText}>⚙️ Settings</Text>
               </TouchableOpacity>
             </View>
           </View>

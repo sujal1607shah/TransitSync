@@ -251,6 +251,32 @@ const markAsRead = async (req, res) => {
   }
 };
 
+// @desc    Upload Media for Chat (Photos / Videos / Files)
+// @route   POST /api/chat/upload
+// @access  Private
+const uploadMedia = async (req, res) => {
+  try {
+    if (!req.file) {
+      return errorResponse(res, 400, 'No media file provided');
+    }
+
+    let sub = 'documents';
+    if (req.file.mimetype.startsWith('image/')) sub = 'images';
+    else if (req.file.mimetype.startsWith('video/')) sub = 'videos';
+
+    const fileUrl = `/uploads/${sub}/${req.file.filename}`;
+
+    return successResponse(res, 200, 'Media uploaded successfully', {
+      fileUrl,
+      fileName: req.file.originalname,
+      mimeType: req.file.mimetype,
+      size: req.file.size,
+    });
+  } catch (error) {
+    return errorResponse(res, 500, error.message);
+  }
+};
+
 module.exports = {
   getConversations,
   getChatUsers,
@@ -258,4 +284,6 @@ module.exports = {
   getMessages,
   sendMessage,
   markAsRead,
+  uploadMedia,
 };
+

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   StyleSheet,
   View,
@@ -10,15 +10,14 @@ import {
   Alert,
   Platform,
   NativeModules,
+  Linking,
+  ActivityIndicator,
 } from "react-native";
 import ScreenWrapper from "../components/ScreenWrapper";
 import { authColors } from "../colors/colors";
-
-const VEHICLES = ["VAN-05", "TRUCK-11", "MINI-03", "TRK-12", "VAN-09"];
-const TRIPS = ["TR001", "TR004", "TR005", "TR006"];
-
-const getTodayString = () => new Date().toISOString().split("T")[0];
-
+import useAuthStore from "../store/AuthStore";
+import client from "../api/axiosClient";
+import { ExpensesUrl, ExpensesPdfUrl, BASE_URL } from "../api/apiPath";
 import { requestStoragePermission } from "../utils/permissions";
 
 // Safe loader for react-native-fs to prevent runtime crash when native module isn't linked yet
@@ -33,11 +32,32 @@ const getRNFS = () => {
   return null;
 };
 
+const VEHICLES = ["VAN-05", "TRUCK-11", "MINI-03", "TRK-12", "VAN-09"];
+const TRIPS = ["TR001", "TR004", "TR005", "TR006"];
+
+const getTodayString = () => new Date().toISOString().split("T")[0];
+
 export default function ExpenseScreen() {
+  const { user, organization } = useAuthStore();
+  const userRole = user?.role || "ROLE_DRIVER";
+  const canDownloadPdf =
+    userRole === "ROLE_ADMIN" ||
+    userRole === "ADMIN" ||
+    userRole === "ROLE_DISPATCHER" ||
+    userRole === "DISPATCHER";
+
+  const userRoleLabel =
+    userRole === "ROLE_ADMIN" || userRole === "ADMIN"
+      ? "Fleet Admin"
+      : userRole === "ROLE_DISPATCHER" || userRole === "DISPATCHER"
+      ? "Dispatcher"
+      : "Driver";
+
   const [activeTab, setActiveTab] = useState<"FUEL" | "EXPENSE">("FUEL");
   const [fuelModalVisible, setFuelModalVisible] = useState(false);
   const [expModalVisible, setExpModalVisible] = useState(false);
   const [dateModalVisible, setDateModalVisible] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   // Search and Filter State
   const [searchQuery, setSearchQuery] = useState("");
@@ -61,6 +81,65 @@ export default function ExpenseScreen() {
     { id: 2, trip: "TR005", vehicle: "TRK-12", date: todayStr, toll: 340, other: 200, maint: 18000, notes: "Engine tuning & highway toll" },
     { id: 3, trip: "TR004", vehicle: "MINI-03", date: "2026-08-21", toll: 80, other: 50, maint: 0, notes: "State border entry toll" },
   ]);
+
+  // Sync with Backend API
+  useEffect(() => {
+    const fetchBackendExpenses = async () => {
+      try {
+        const res = await client.get(ExpensesUrl);
+        const data = res.data?.data?.expenses;
+        if (Array.isArray(data) && data.length > 0) {
+          const loadedFuel: any[] = [];
+          const loadedExpenses: any[] = [];
+
+          data.forEach((item: any, idx: number) => {
+            const itemDate = item.date ? String(item.date).split("T")[0] : todayStr;
+            if (item.category === "FUEL") {
+              const litersMatch = (item.description || "").match(/(\d+(\.\d+)?)\s*Liters/i);
+              loadedFuel.push({
+                id: item._id || idx + 100,
+                vehicle: item.vehicleID || "VAN-05",
+                date: itemDate,
+                liters: litersMatch ? Number(litersMatch[1]) : 40,
+                cost: item.amount,
+                notes: item.description || "Fuel refill",
+              });
+            } else {
+              loadedExpenses.push({
+                id: item._id || idx + 100,
+                trip: item.tripID || "TR001",
+                vehicle: item.vehicleID || "VAN-05",
+                date: itemDate,
+                toll: item.category === "TOLL" ? item.amount : 0,
+                maint: item.category === "MAINTENANCE" ? item.amount : 0,
+                other: item.category !== "TOLL" && item.category !== "MAINTENANCE" ? item.amount : 0,
+                notes: item.description || "Trip expense",
+              });
+            }
+          });
+
+          if (loadedFuel.length > 0) {
+            setFuelLogs((prev) => {
+              const existingIds = new Set(prev.map((p) => p.id));
+              const fresh = loadedFuel.filter((f) => !existingIds.has(f.id));
+              return [...fresh, ...prev];
+            });
+          }
+          if (loadedExpenses.length > 0) {
+            setExpenses((prev) => {
+              const existingIds = new Set(prev.map((p) => p.id));
+              const fresh = loadedExpenses.filter((e) => !existingIds.has(e.id));
+              return [...fresh, ...prev];
+            });
+          }
+        }
+      } catch (e) {
+        console.log("Expense fetch notice:", e);
+      }
+    };
+
+    fetchBackendExpenses();
+  }, [todayStr]);
 
   // Form State - Fuel
   const [fuelVehicle, setFuelVehicle] = useState(VEHICLES[0]);
@@ -232,6 +311,125 @@ export default function ExpenseScreen() {
     }
   };
 
+  // ── Download PDF Statement (Admin & Dispatcher) ──────────────────────────
+  const handleDownloadPDF = async () => {
+    if (!canDownloadPdf) {
+      Alert.alert(
+        "Access Restricted 🔒",
+        "Only Fleet Administrators and Operations Dispatchers are authorized to download official Expense PDF statements."
+      );
+      return;
+    }
+
+    try {
+      setIsDownloadingPdf(true);
+      const hasPermission = await requestStoragePermission();
+      if (!hasPermission && Platform.OS === "android") {
+        setIsDownloadingPdf(false);
+        Alert.alert(
+          "Permission Denied",
+          "Storage permission is required to save the PDF statement to your device."
+        );
+        return;
+      }
+
+      // Collect items based on active tab and current filters
+      let reportItems: any[] = [];
+      const periodLabel = datePreset === "CUSTOM" ? `${startDate} to ${endDate}` : datePreset;
+
+      if (activeTab === "FUEL") {
+        if (filteredFuelLogs.length === 0) {
+          setIsDownloadingPdf(false);
+          Alert.alert("No Data", "There are no fuel logs to export for the selected filter.");
+          return;
+        }
+        reportItems = filteredFuelLogs.map((log) => ({
+          date: log.date,
+          category: "FUEL",
+          vehicleID: log.vehicle,
+          tripID: "--",
+          amount: log.cost,
+          notes: `${log.liters} Liters fuel • ${log.notes || "Refueling"}`,
+        }));
+      } else {
+        if (filteredExpenses.length === 0) {
+          setIsDownloadingPdf(false);
+          Alert.alert("No Data", "There are no trip expenses to export for the selected filter.");
+          return;
+        }
+        reportItems = filteredExpenses.map((exp) => ({
+          date: exp.date,
+          category: exp.maint > 0 ? "MAINTENANCE" : exp.toll > 0 ? "TOLL" : "OPERATIONAL",
+          vehicleID: exp.vehicle,
+          tripID: exp.trip,
+          amount: exp.toll + exp.maint + exp.other,
+          notes: `Toll: Rs.${exp.toll}, Maint: Rs.${exp.maint}, Other: Rs.${exp.other} • ${exp.notes || ""}`,
+        }));
+      }
+
+      // Call Backend to generate PDF
+      const res = await client.post(ExpensesPdfUrl, {
+        items: reportItems,
+        period: `${periodLabel} (${activeTab === "FUEL" ? "Fuel Register" : "Trip Expenses"})`,
+        startDate,
+        endDate,
+      });
+
+      const { downloadUrl, fileName, recordCount, metrics } = res.data?.data || {};
+      const fullPdfUrl = `${BASE_URL}${downloadUrl}`;
+      const RNFS = getRNFS();
+
+      if (!RNFS) {
+        setIsDownloadingPdf(false);
+        Alert.alert(
+          "Statement Prepared 📄",
+          `Generated ${fileName || "Expense_Report.pdf"} containing ${recordCount || reportItems.length} records.\n\nTotal: ₹${(metrics?.totalExpense || 0).toLocaleString("en-IN")}\n\nServer Link:\n${fullPdfUrl}`,
+          [
+            { text: "Open In Browser", onPress: () => Linking.openURL(fullPdfUrl) },
+            { text: "Done", style: "cancel" },
+          ]
+        );
+        return;
+      }
+
+      const baseDir =
+        Platform.OS === "android"
+          ? RNFS.DownloadDirectoryPath || RNFS.ExternalDirectoryPath
+          : RNFS.DocumentDirectoryPath;
+
+      const localFilePath = `${baseDir}/${fileName || `TransitSync_Expense_Report_${Date.now()}.pdf`}`;
+
+      // Download file to storage
+      await RNFS.downloadFile({
+        fromUrl: fullPdfUrl,
+        toFile: localFilePath,
+      }).promise;
+
+      setIsDownloadingPdf(false);
+
+      Alert.alert(
+        "PDF Downloaded Successfully! 📄",
+        `Official TransitSync statement downloaded for ${userRoleLabel}.\n\nRecords: ${recordCount || reportItems.length}\nTotal: ₹${(metrics?.totalExpense || 0).toLocaleString("en-IN")}\n\nSaved to:\n${localFilePath}`,
+        [
+          {
+            text: "Open / View",
+            onPress: () => {
+              Linking.openURL(fullPdfUrl).catch(() => {});
+            },
+          },
+          { text: "OK", style: "cancel" },
+        ]
+      );
+    } catch (err: any) {
+      setIsDownloadingPdf(false);
+      console.error("PDF Download Error:", err);
+      Alert.alert(
+        "Export Notice",
+        err.response?.data?.message || err.message || "Failed to download PDF statement."
+      );
+    }
+  };
+
   const handleSaveFuel = () => {
     if (!fuelLiters || !fuelCost) {
       Alert.alert("Error", "Please fill in liters and cost fields");
@@ -246,6 +444,15 @@ export default function ExpenseScreen() {
       notes: fuelNotes.trim(),
     };
     setFuelLogs((prev) => [newLog, ...prev]);
+
+    // Persist to Backend API
+    client.post(ExpensesUrl, {
+      vehicleID: fuelVehicle,
+      category: "FUEL",
+      amount: Number(fuelCost),
+      description: `${fuelLiters} Liters fuel • ${fuelNotes.trim()}`,
+    }).catch((e) => console.log("Failed to sync fuel to backend:", e));
+
     setFuelLiters("");
     setFuelCost("");
     setFuelNotes("");
@@ -258,17 +465,32 @@ export default function ExpenseScreen() {
       Alert.alert("Error", "Please enter at least one expense amount");
       return;
     }
+    const tollAmt = Number(expToll) || 0;
+    const maintAmt = Number(expMaint) || 0;
+    const otherAmt = Number(expOther) || 0;
+    const totalAmt = tollAmt + maintAmt + otherAmt;
+
     const newExp = {
       id: Date.now(),
       trip: expTrip,
       vehicle: expVehicle,
       date: getTodayString(),
-      toll: Number(expToll) || 0,
-      other: Number(expOther) || 0,
-      maint: Number(expMaint) || 0,
+      toll: tollAmt,
+      other: otherAmt,
+      maint: maintAmt,
       notes: expNotes.trim(),
     };
     setExpenses((prev) => [newExp, ...prev]);
+
+    // Persist to Backend API
+    client.post(ExpensesUrl, {
+      tripID: expTrip,
+      vehicleID: expVehicle,
+      category: maintAmt > 0 ? "MAINTENANCE" : tollAmt > 0 ? "TOLL" : "OTHER",
+      amount: totalAmt,
+      description: `Toll: ${tollAmt}, Maint: ${maintAmt}, Other: ${otherAmt} • ${expNotes.trim()}`,
+    }).catch((e) => console.log("Failed to sync expense to backend:", e));
+
     setExpToll("");
     setExpOther("");
     setExpMaint("");
@@ -382,6 +604,16 @@ export default function ExpenseScreen() {
           </ScrollView>
         </View>
 
+        {/* Role Authorization Notice */}
+        {canDownloadPdf && (
+          <View style={styles.roleAuthBanner}>
+            <Text style={{ fontSize: 16 }}>🛡️</Text>
+            <Text style={styles.roleAuthBannerText}>
+              {userRoleLabel} Access Active: Authorized to generate & download official financial PDF statements.
+            </Text>
+          </View>
+        )}
+
         {activeTab === "FUEL" ? (
           <View style={styles.panel}>
             <View style={styles.panelHeader}>
@@ -390,8 +622,17 @@ export default function ExpenseScreen() {
                 <Text style={styles.panelSubtitle}>Showing {filteredFuelLogs.length} records</Text>
               </View>
               <View style={styles.headerActions}>
+                <TouchableOpacity
+                  style={[styles.exportPdfButton, isDownloadingPdf && styles.btnDisabled]}
+                  onPress={handleDownloadPDF}
+                  disabled={isDownloadingPdf}
+                >
+                  <Text style={styles.exportPdfButtonText}>
+                    {isDownloadingPdf ? "⏳ PDF..." : "📄 PDF"}
+                  </Text>
+                </TouchableOpacity>
                 <TouchableOpacity style={styles.exportButton} onPress={handleExportToExcel}>
-                  <Text style={styles.exportButtonText}>📊 Export Excel</Text>
+                  <Text style={styles.exportButtonText}>📊 Excel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.addButton} onPress={() => setFuelModalVisible(true)}>
                   <Text style={styles.addButtonText}>+ Log Fuel</Text>
@@ -438,8 +679,17 @@ export default function ExpenseScreen() {
                 <Text style={styles.panelSubtitle}>Showing {filteredExpenses.length} records</Text>
               </View>
               <View style={styles.headerActions}>
+                <TouchableOpacity
+                  style={[styles.exportPdfButton, isDownloadingPdf && styles.btnDisabled]}
+                  onPress={handleDownloadPDF}
+                  disabled={isDownloadingPdf}
+                >
+                  <Text style={styles.exportPdfButtonText}>
+                    {isDownloadingPdf ? "⏳ PDF..." : "📄 PDF"}
+                  </Text>
+                </TouchableOpacity>
                 <TouchableOpacity style={styles.exportButton} onPress={handleExportToExcel}>
-                  <Text style={styles.exportButtonText}>📊 Export Excel</Text>
+                  <Text style={styles.exportButtonText}>📊 Excel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.addButton} onPress={() => setExpModalVisible(true)}>
                   <Text style={styles.addButtonText}>+ Add Expense</Text>
@@ -810,14 +1060,49 @@ const styles = StyleSheet.create({
   },
   headerActions: {
     flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  roleAuthBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 176, 32, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 176, 32, 0.25)",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    marginBottom: 12,
     gap: 8,
+  },
+  roleAuthBannerText: {
+    color: authColors.roleAccent,
+    fontSize: 11,
+    fontWeight: "600",
+    flex: 1,
+  },
+  exportPdfButton: {
+    backgroundColor: "rgba(239, 68, 68, 0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.5)",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  exportPdfButtonText: {
+    color: "#F87171",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  btnDisabled: {
+    opacity: 0.5,
   },
   exportButton: {
     backgroundColor: "rgba(56, 189, 248, 0.15)",
     borderWidth: 1,
     borderColor: authColors.logoRing,
     borderRadius: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 8,
   },
   exportButtonText: {
@@ -828,7 +1113,7 @@ const styles = StyleSheet.create({
   addButton: {
     backgroundColor: authColors.roleAccent,
     borderRadius: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 8,
   },
   addButtonText: {

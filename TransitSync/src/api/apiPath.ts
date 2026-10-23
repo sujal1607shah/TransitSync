@@ -1,5 +1,7 @@
 // Base API URL pointing to Node.js Express server
-export const BASE_URL = "http://10.22.153.194:5000";
+const isother = true;
+
+export const BASE_URL = isother ? "http://10.22.153.194:5000" : "http://192.168.1.30:5000";
 
 // Organization Onboarding & Management APIs
 export const OrganizationRegisterUrl = `${BASE_URL}/api/organizations/register`;
@@ -41,6 +43,7 @@ export const IssuesUrl = `${BASE_URL}/api/issues`;
 // Maintenance & Expense APIs
 export const MaintenanceUrl = `${BASE_URL}/api/maintenance`;
 export const ExpensesUrl = `${BASE_URL}/api/expenses`;
+export const ExpensesPdfUrl = `${BASE_URL}/api/expenses/pdf`;
 
 // Dashboard & Analytics APIs
 export const AdminDashboardUrl = `${BASE_URL}/api/dashboard/admin`;
@@ -54,6 +57,7 @@ export const ChatConversationsUrl = `${BASE_URL}/api/chat/conversations`;
 export const ChatUsersUrl = `${BASE_URL}/api/chat/users`;
 export const ChatDirectConversationUrl = `${BASE_URL}/api/chat/conversations/direct`;
 export const ChatMessagesUrl = `${BASE_URL}/api/chat/messages`;
+export const ChatUploadUrl = `${BASE_URL}/api/chat/upload`;
 
 // Emergency SOS & POD APIs
 export const EmergencySOSUrl = `${BASE_URL}/api/emergency/sos`;

@@ -1,8 +1,9 @@
 import { create } from "zustand";
 import axios from "../api/axiosClient";
-import { GetDrivers, ChatConversationsUrl, ChatDirectConversationUrl, ChatMessagesUrl, BASE_URL } from "../api/apiPath";
+import { GetDrivers, ChatConversationsUrl, ChatDirectConversationUrl, ChatMessagesUrl, ChatUploadUrl, BASE_URL } from "../api/apiPath";
 import { socketService } from "../services/socketService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type UserRole = "ROLE_ADMIN" | "ROLE_DISPATCHER" | "ROLE_DRIVER" | string;
@@ -49,6 +50,7 @@ interface ChatState {
   fetchMessages: (conversationId: string, contactId: string) => Promise<void>;
   getMessages: (contactId: string) => ChatMessage[];
   sendMessage: (contactId: string, text: string, senderName: string, mediaUri?: string, mediaType?: "image" | "video" | "file", mediaName?: string) => void;
+  uploadMedia: (fileUri: string, fileName?: string, mimeType?: string) => Promise<string | null>;
   markRead: (contactId: string) => void;
   getLastMessage: (contactId: string) => ChatMessage | null;
   getUnread: (contactId: string) => number;
@@ -253,6 +255,49 @@ const useChatStore = create<ChatState>((set, get) => ({
       });
     } catch (error) {
       console.error("Failed to send message", error);
+    }
+  },
+
+  uploadMedia: async (fileUri: string, fileName?: string, mimeType?: string): Promise<string | null> => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      const formData = new FormData();
+
+      let normalizedUri = fileUri;
+      if (Platform.OS === "android" && !normalizedUri.startsWith("file://") && !normalizedUri.startsWith("content://")) {
+        normalizedUri = `file://${normalizedUri}`;
+      }
+
+      formData.append("file", {
+        uri: normalizedUri,
+        type: mimeType || "image/jpeg",
+        name: fileName || `chat_${Date.now()}.jpg`,
+      } as any);
+
+      console.debug("Uploading media to:", ChatUploadUrl, normalizedUri);
+
+      const response = await fetch(ChatUploadUrl, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      });
+
+      const resData = await response.json();
+      console.debug("Upload response status:", response.status, resData);
+
+      if (response.ok && resData?.data?.fileUrl) {
+        return resData.data.fileUrl;
+      }
+      if (resData?.message) {
+        console.warn("Upload server response:", resData.message);
+      }
+      return null;
+    } catch (error) {
+      console.error("Failed to upload chat media via fetch:", error);
+      return null;
     }
   },
 

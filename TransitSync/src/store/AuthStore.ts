@@ -51,13 +51,13 @@ export const useAuthStore = create<AuthState>((set) => ({
       const token = await AsyncStorage.getItem("token");
       const userStr = await AsyncStorage.getItem("user");
       const orgStr = await AsyncStorage.getItem("organization");
-      
+
       if (
-        token === "demo-jwt-token" || 
-        token === "demo-token" || 
-        token === "bearer-token-live" || 
-        token === "undefined" || 
-        !token || 
+        token === "demo-jwt-token" ||
+        token === "demo-token" ||
+        token === "bearer-token-live" ||
+        token === "undefined" ||
+        !token ||
         !token.startsWith("eyJ")
       ) {
         await AsyncStorage.removeItem("token");
